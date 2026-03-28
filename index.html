@@ -1,1 +1,995 @@
-<h1>GRAES Golf - initializing...</h1>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GRÆS Golf App — T-041 (Supabase)</title>
+
+<!--
+========================================================
+  GRÆS T-041 — Supabase 統合版
+  セットアップ手順：
+  1. https://supabase.com でプロジェクト作成（無料）
+  2. 下記 SUPABASE_URL と SUPABASE_ANON_KEY を置き換える
+  3. Supabase Dashboard > SQL Editor で下記SQLを実行する
+  4. Storage > New bucket > "avatars" を作成（public: true）
+  5. Storage > New bucket > "round-photos" を作成（public: true）
+========================================================
+
+  【Supabase SQL セットアップ】
+  
+  -- プロフィールテーブル
+  CREATE TABLE profiles (
+    id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+    name TEXT,
+    handle TEXT UNIQUE,
+    since TEXT,
+    phone TEXT,
+    avatar_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY "自分のプロフィールのみ参照" ON profiles FOR SELECT USING (auth.uid() = id);
+  CREATE POLICY "自分のプロフィールのみ更新" ON profiles FOR UPDATE USING (auth.uid() = id);
+  CREATE POLICY "自分のプロフィールのみ挿入" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+
+  -- ラウンドテーブル
+  CREATE TABLE rounds (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    date TEXT NOT NULL,
+    course TEXT NOT NULL,
+    holes INTEGER NOT NULL,
+    score_arr INTEGER[] NOT NULL,
+    par_arr INTEGER[] NOT NULL,
+    photo_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  ALTER TABLE rounds ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY "自分のラウンドのみ参照" ON rounds FOR SELECT USING (auth.uid() = user_id);
+  CREATE POLICY "自分のラウンドのみ挿入" ON rounds FOR INSERT WITH CHECK (auth.uid() = user_id);
+  CREATE POLICY "自分のラウンドのみ更新" ON rounds FOR UPDATE USING (auth.uid() = user_id);
+  CREATE POLICY "自分のラウンドのみ削除" ON rounds FOR DELETE USING (auth.uid() = user_id);
+
+  -- ユーザー登録時に自動でprofilesレコード作成するトリガー
+  CREATE OR REPLACE FUNCTION handle_new_user()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    INSERT INTO profiles (id, name, handle)
+    VALUES (NEW.id, NEW.raw_user_meta_data->>'name', NEW.raw_user_meta_data->>'handle');
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql SECURITY DEFINER;
+  CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+
+  【Storage設定】
+  - avatars バケット（public）: ユーザーアバター画像
+  - round-photos バケット（public）: ラウンド写真
+  各バケットのPolicies > New Policy > "Give users access to own folder":
+    SELECT, INSERT, UPDATE, DELETE で auth.uid()::text = (storage.foldername(name))[1] を設定
+
+========================================================
+-->
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#e8e8e8;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:20px;font-family:-apple-system,'Hiragino Kaku Gothic ProN','Yu Gothic','Meiryo',sans-serif;}
+.wrap{display:flex;justify-content:center;}
+.phone{width:310px;background:#f5f5f0;border-radius:34px;overflow:hidden;border:5px solid #1a1a1a;box-shadow:0 10px 36px rgba(0,0,0,.35);position:relative;}
+.sbar{height:36px;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:.5px solid #eee;flex-shrink:0;}
+.logo{font-family:Georgia,serif;letter-spacing:2px;font-size:12px;color:#1a1a1a;}
+#scr{height:530px;overflow-y:auto;background:#f5f5f0;}
+#scr::-webkit-scrollbar{display:none;}
+.tbr{background:#3B6D11;color:#fff;text-align:center;font-size:9px;font-weight:500;padding:6px 12px;display:none;line-height:1.4;}
+.tbr.on{display:block;}
+.tbar{height:54px;background:#fff;border-top:.5px solid #e0ddd5;display:grid;grid-template-columns:1fr 1fr 1fr;flex-shrink:0;}
+.tb{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:#999890;padding:3px;}
+.tb.act{color:#3B6D11;background:#f9fdf5;}
+.tb svg{width:17px;height:17px;}.tb span{font-size:7px;}
+.sh{padding:8px 12px 7px;background:#fff;border-bottom:1.5px solid #eaf3de;display:flex;align-items:center;justify-content:space-between;}
+.st{color:#1a1a1a;font-size:12px;font-weight:500;}
+.sb2{background:#fff;padding:6px 12px;border-bottom:.5px solid #eaf3de;display:flex;align-items:center;gap:9px;}
+.si .l{font-size:6px;color:#999890;text-align:center;}.si .v{font-size:14px;font-weight:500;color:#1a1a1a;text-align:center;}
+.bdg{background:#f0f8e8;border:.5px solid #c0dd97;border-radius:7px;padding:4px 9px;margin:6px 10px;font-size:7.5px;color:#3B6D11;font-weight:500;}
+.hc{background:#fff;border-radius:9px;margin:0 10px 6px;padding:7px 11px;border:.5px solid #e8e6e0;}
+.sq{width:25px;height:25px;border-radius:5px;border:1.5px solid #c0dd97;background:#fff;color:#3B6D11;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;user-select:none;flex-shrink:0;}
+.psq{width:18px;height:18px;border-radius:4px;border:1px solid #c0dd97;background:#f0f8e8;color:#3B6D11;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;user-select:none;flex-shrink:0;}
+.hd2{width:10px;height:10px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:3.5px;font-weight:700;}
+.hco{background:#378ADD;color:#fff;}.hal{background:#7F77DD;color:#fff;}.he{background:#EF9F27;color:#fff;}.hbi{background:#4da829;color:#fff;}.hp{background:#c8ddb8;color:#3B6D11;}.hbo{background:rgba(226,75,74,.75);color:#fff;}.hw{background:#a32d2d;color:#fff;}.hpl{background:#fff;border:1px solid #ccc;color:#1a1a1a;}
+.dot{width:12px;height:12px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:4px;font-weight:700;}
+.dco{background:#378ADD;color:#fff;}.dal{background:#7F77DD;color:#fff;}.de{background:#EF9F27;color:#fff;}.db{background:#4da829;color:#fff;}.dp{background:#c8ddb8;color:#3B6D11;}.dbo{background:rgba(226,75,74,.75);color:#fff;}.dw{background:#a32d2d;color:#fff;}.dpl{background:#fff;border:1px solid #ccc;color:#1a1a1a;}
+.sco{background:rgba(55,138,221,0.75);color:#fff;}
+.sal{background:rgba(127,119,221,0.75);color:#fff;}
+.se{background:rgba(245,168,0,0.80);color:#fff;}
+.sb-d{background:rgba(29,184,90,0.80);color:#fff;}
+.sp-t{background:rgba(45,107,20,0.70);color:rgba(255,255,255,0.90);}
+.sbo{background:rgba(232,48,48,0.75);color:#fff;}
+.sw{background:rgba(160,24,24,0.75);color:#fff;}
+.spl{background:rgba(255,255,255,0.18);color:rgba(255,255,255,0.70);}
+.ng{display:grid;grid-template-columns:repeat(9,8px);gap:2px;width:88px;}
+.nl-d{color:rgba(255,255,255,0.38);font-size:3.5px;text-align:center;}
+.nl-t{color:rgba(255,255,255,0.55);font-size:3.5px;text-align:center;}
+.shd{width:8px;height:8px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:3.5px;font-weight:700;}
+.sbtn{display:block;width:calc(100% - 20px);margin:6px 10px 10px;background:#1a1a1a;border:none;border-radius:10px;padding:11px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;}
+.sbtn:hover{background:#333;}
+.inp{width:100%;background:#f5f5f0;border:.5px solid #e0ddd5;border-radius:7px;padding:7px 9px;font-size:11px;color:#1a1a1a;outline:none;font-family:inherit;}
+.inp:focus{border-color:#4da829;background:#fff;}
+.ho{flex:1;background:#f5f5f0;border:.5px solid #e0ddd5;border-radius:7px;padding:9px;text-align:center;cursor:pointer;font-size:13px;font-weight:500;color:#1a1a1a;}
+.ho.sel{background:#f0f8e8;border:1.5px solid #4da829;color:#3B6D11;}
+.checker{background-image:linear-gradient(45deg,#d8d8d8 25%,transparent 25%),linear-gradient(-45deg,#d8d8d8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#d8d8d8 75%),linear-gradient(-45deg,transparent 75%,#d8d8d8 75%);background-size:10px 10px;background-position:0 0,0 5px,5px -5px,-5px 0;background-color:#f0f0f0;border-radius:10px;}
+.srow{display:flex;gap:8px;margin:7px 6px;justify-content:center;}
+.scol{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;}
+.slb{font-size:8px;color:#999890;}
+.stt{padding:5px 3px;display:flex;flex-direction:column;align-items:center;width:104px;min-height:80px;}
+.std{background:rgba(6,14,4,0.72);border-radius:11px;border:0.5px solid rgba(77,168,41,0.22);padding:7px 7px;display:flex;flex-direction:column;align-items:center;justify-content:center;width:104px;min-height:80px;}
+.dlsec{padding:4px 10px 6px;background:#f8fbf5;border-top:.5px solid #eaf3de;}
+.dlsec-lbl{font-size:8px;color:#3B6D11;font-weight:500;margin-bottom:4px;}
+.dlrow{display:flex;gap:5px;margin-bottom:5px;}
+.dlbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:9px 4px;border-radius:9px;background:#1a1a1a;color:#fff;font-size:8.5px;font-weight:700;cursor:pointer;font-family:inherit;position:relative;overflow:hidden;line-height:1.2;user-select:none;}
+.dlbtn::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:#4da829;pointer-events:none;}
+.edit-section{margin:0 10px 8px;background:#fff;border-radius:10px;border:.5px solid #e8e6e0;overflow:hidden;}
+.edit-hd{padding:7px 10px 5px;font-size:8px;font-weight:500;color:#3B6D11;border-bottom:.5px solid #f0ede8;display:flex;align-items:center;justify-content:space-between;}
+.edit-hint{font-size:7px;color:#999890;font-weight:400;}
+.eitem{display:flex;align-items:center;gap:6px;padding:5px 10px;border-bottom:.5px solid #f8f5f0;}
+.eitem:last-child{border-bottom:none;}
+.eitem-lbl{flex:1;font-size:9px;color:#1a1a1a;font-weight:500;}
+.arr-group{display:flex;flex-direction:column;gap:2px;}
+.arr{width:18px;height:16px;border-radius:4px;border:.5px solid #e0ddd5;background:#f5f5f0;color:#666;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;user-select:none;line-height:1;}
+.arr:active{background:#eaf3de;color:#3B6D11;}
+.arr.disabled{opacity:.25;pointer-events:none;}
+.vis-toggle{width:28px;height:16px;border-radius:8px;background:#e0ddd5;cursor:pointer;position:relative;flex-shrink:0;transition:background .15s;}
+.vis-toggle.on{background:#4da829;}
+.vis-toggle::after{content:'';position:absolute;width:12px;height:12px;border-radius:50%;background:#fff;top:2px;left:2px;transition:transform .15s;}
+.vis-toggle.on::after{transform:translateX(12px);}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;padding:6px 12px 4px;}
+.cal-nav-btn{width:24px;height:24px;border-radius:50%;border:.5px solid #c0dd97;background:#f0f8e8;color:#3B6D11;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit;}
+.cal-nav-title{font-size:9px;font-weight:500;color:#3B6D11;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:3px 12px 7px;}
+.cd{height:24px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#1a1a1a;}
+.cd.has{background:#4da829;color:#fff;font-weight:500;}.cd.tod{border:1.5px solid #3B6D11;color:#3B6D11;font-weight:500;}.cd.tod.has{background:#3B6D11;color:#fff;border:none;}
+.img-upload-btn{background:#f0f8e8;border:.5px solid #c0dd97;border-radius:8px;padding:6px 9px;font-size:8px;color:#3B6D11;font-weight:500;cursor:pointer;text-align:center;display:flex;align-items:center;gap:5px;justify-content:center;}
+/* 認証・設定 */
+.auth-wrap{min-height:100%;display:flex;flex-direction:column;justify-content:center;padding:20px 16px;background:#f5f5f0;}
+.auth-logo{font-family:Georgia,serif;letter-spacing:3px;font-size:22px;color:#1a1a1a;text-align:center;margin-bottom:4px;}
+.auth-sub{font-size:9px;color:#999890;text-align:center;margin-bottom:24px;}
+.auth-card{background:#fff;border-radius:14px;border:.5px solid #e8e6e0;padding:16px 14px;margin-bottom:12px;}
+.auth-title{font-size:11px;font-weight:600;color:#1a1a1a;margin-bottom:12px;}
+.fld{margin-bottom:10px;}
+.fld-lbl{font-size:8px;color:#3B6D11;font-weight:500;margin-bottom:3px;}
+.fld-row{display:flex;align-items:center;}
+.auth-btn{width:100%;background:#1a1a1a;border:none;border-radius:10px;padding:11px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px;}
+.auth-btn.green{background:#3B6D11;}
+.auth-btn.outline{background:#fff;border:1.5px solid #1a1a1a;color:#1a1a1a;}
+.auth-switch{text-align:center;font-size:8.5px;color:#999890;margin-top:8px;}
+.auth-switch span{color:#3B6D11;cursor:pointer;font-weight:500;}
+.otp-grid{display:flex;gap:6px;justify-content:center;margin:8px 0;}
+.otp-box{width:34px;height:38px;border:1.5px solid #e0ddd5;border-radius:8px;background:#f5f5f0;font-size:16px;font-weight:600;text-align:center;color:#1a1a1a;outline:none;font-family:inherit;}
+.otp-box:focus{border-color:#4da829;background:#fff;}
+.settings-overlay{position:absolute;inset:0;background:#f5f5f0;z-index:10;overflow-y:auto;}
+.settings-overlay::-webkit-scrollbar{display:none;}
+.sec-card{background:#fff;border-radius:11px;margin:0 10px 8px;border:.5px solid #e8e6e0;overflow:hidden;}
+.sec-row{display:flex;align-items:center;padding:10px 12px;border-bottom:.5px solid #f5f3f0;gap:10px;cursor:pointer;}
+.sec-row:last-child{border-bottom:none;}
+.sec-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.sec-info{flex:1;}
+.sec-lbl{font-size:10px;font-weight:500;color:#1a1a1a;}
+.sec-val{font-size:8px;color:#999890;margin-top:1px;}
+.sec-arrow{font-size:11px;color:#c0bdb5;}
+.badge-green{background:#f0f8e8;color:#3B6D11;border-radius:5px;padding:2px 7px;font-size:7.5px;font-weight:500;}
+.badge-gray{background:#f5f5f0;color:#999890;border-radius:5px;padding:2px 7px;font-size:7.5px;font-weight:500;}
+.danger-btn{width:calc(100% - 20px);margin:4px 10px;background:#fff;border:1.5px solid #E24B4A;border-radius:10px;padding:10px;color:#E24B4A;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;text-align:center;}
+/* ローディング */
+.loading-overlay{position:absolute;inset:0;background:rgba(245,245,240,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;}
+.spinner{width:28px;height:28px;border:3px solid #eaf3de;border-top-color:#3B6D11;border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+/* エラー表示 */
+.err-msg{background:#fff0f0;border:.5px solid #f5c6c6;border-radius:7px;padding:7px 10px;font-size:8.5px;color:#c0392b;margin-bottom:8px;display:none;}
+.err-msg.on{display:block;}
+/* 同期ステータス */
+.sync-dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="phone">
+  <div class="sbar">
+    <span style="font-size:11px;font-weight:500;color:#1a1a1a;">9:41</span>
+    <span class="logo">GR&#198;S</span>
+    <span id="sync-status" style="font-size:8px;color:#999890;display:flex;align-items:center;"></span>
+  </div>
+  <div id="scr"><div class="tbr" id="toast"></div><div id="pg"></div></div>
+  <div class="tbar" id="tbar" style="display:none;"></div>
+  <div class="settings-overlay" id="settings-overlay" style="display:none;"></div>
+  <div class="loading-overlay" id="loading" style="display:none;">
+    <div class="spinner"></div>
+    <div style="font-size:9px;color:#3B6D11;margin-top:10px;" id="loading-msg">読み込み中...</div>
+  </div>
+</div>
+</div>
+
+<script>
+/* ============================================================
+   ★★★ ここにSupabaseの情報を入力してください ★★★
+   Supabase Dashboard > Settings > API から取得
+   ============================================================ */
+const SUPABASE_URL = 'https://osstqqkjxtzxnojnrirl.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zc3RxcWtqeHR6eG5vam5yaXJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0OTgyMTUsImV4cCI6MjA5MDA3NDIxNX0.VHhDMP-pPd5eVocGu-2gyQEiJAlZMIo-vumOhXhVLcU';
+/* ============================================================ */
+
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ===== アプリ状態 ===== */
+const P9=[4,3,4,5,4,3,4,4,5], P18=[4,4,3,5,4,4,3,5,4,4,3,4,5,4,4,3,5,4];
+let curTab='home', setupDone=false, courseName='', holes=18, pars=[...P18], scores=[...P18];
+let stampTarget=null, detailTarget=null, pendingImgFile=null, pendingImgPreview=null;
+const nowDate=new Date();
+let calYear=nowDate.getFullYear(), calMonth=nowDate.getMonth();
+let authScreen='login'; /* login | register | otp | verify-email */
+let authMethod='email';
+let currentUser=null;   /* Supabase auth user */
+let profile=null;       /* profiles テーブルのデータ */
+let rounds=[];          /* rounds テーブルのデータ */
+let isLoading=false;
+
+let stampLayout=[
+  {id:'score',label:'スコア / 差分',required:true,vis:true},
+  {id:'course',label:'コース図',required:false,vis:true},
+  {id:'cname',label:'コース名',required:false,vis:true},
+  {id:'front9',label:'前半 H1–9',required:false,vis:true},
+  {id:'back9',label:'後半 H10–18',required:false,vis:true},
+  {id:'logo',label:'GR\u00C6S ロゴ',required:true,vis:true},
+];
+
+/* ===== ローディング ===== */
+function showLoading(msg='読み込み中...'){
+  document.getElementById('loading-msg').textContent=msg;
+  document.getElementById('loading').style.display='flex';
+  isLoading=true;
+}
+function hideLoading(){
+  document.getElementById('loading').style.display='none';
+  isLoading=false;
+}
+
+/* ===== 同期状態表示 ===== */
+function setSyncStatus(state){ /* online | saving | saved | offline */
+  const el=document.getElementById('sync-status');
+  if(state==='saving') el.innerHTML='<span class="sync-dot" style="background:#F5A800;"></span>保存中';
+  else if(state==='saved') el.innerHTML='<span class="sync-dot" style="background:#4da829;"></span>保存済';
+  else if(state==='offline') el.innerHTML='<span class="sync-dot" style="background:#E24B4A;"></span>オフライン';
+  else el.innerHTML='';
+}
+
+/* ===== トースト ===== */
+function toast(m,err=false){
+  const el=document.getElementById('toast');
+  el.textContent=m;
+  el.style.background=err?'#c0392b':'#3B6D11';
+  el.classList.add('on');
+  setTimeout(()=>el.classList.remove('on'),2800);
+}
+
+/* ===== Supabase 認証リスナー ===== */
+sb.auth.onAuthStateChange(async (event, session) => {
+  if(event==='SIGNED_IN' && session){
+    currentUser = session.user;
+    await loadProfile();
+    await loadRounds();
+    document.getElementById('tbar').style.display='grid';
+    render();
+  } else if(event==='SIGNED_OUT'){
+    currentUser=null; profile=null; rounds=[];
+    document.getElementById('tbar').style.display='none';
+    authScreen='login';
+    renderAuth();
+  } else if(event==='PASSWORD_RECOVERY'){
+    toast('パスワードリセットメールを確認してください');
+  }
+});
+
+/* ===== 初期化 ===== */
+async function init(){
+  showLoading('起動中...');
+  const {data:{session}} = await sb.auth.getSession();
+  if(session){
+    currentUser=session.user;
+    await loadProfile();
+    await loadRounds();
+    document.getElementById('tbar').style.display='grid';
+    hideLoading();
+    render();
+  } else {
+    hideLoading();
+    renderAuth();
+  }
+}
+
+/* ===== プロフィール読み込み ===== */
+async function loadProfile(){
+  if(!currentUser) return;
+  const {data,error} = await sb.from('profiles').select('*').eq('id',currentUser.id).single();
+  if(data) profile=data;
+  else profile={id:currentUser.id,name:'',handle:'',since:'',phone:'',avatar_url:null};
+}
+
+/* ===== ラウンド読み込み ===== */
+async function loadRounds(){
+  if(!currentUser) return;
+  const {data,error} = await sb.from('rounds')
+    .select('*')
+    .eq('user_id',currentUser.id)
+    .order('created_at',{ascending:false});
+  if(data){
+    rounds = data.map(r=>({
+      id: r.id,
+      date: r.date,
+      course: r.course,
+      holes: r.holes,
+      img: r.photo_url||null,
+      scoreArr: r.score_arr,
+      parArr: r.par_arr,
+      _dbId: r.id,
+    }));
+  }
+}
+
+/* ===== 認証画面 ===== */
+function renderAuth(){
+  document.getElementById('tbar').style.display='none';
+  const pg=document.getElementById('pg');
+  if(authScreen==='login') pg.innerHTML=loginHTML();
+  else if(authScreen==='register') pg.innerHTML=registerHTML();
+  else if(authScreen==='otp') pg.innerHTML=otpHTML();
+  else if(authScreen==='verify-email') pg.innerHTML=verifyEmailHTML();
+}
+
+function loginHTML(){
+  return`<div class="auth-wrap">
+    <div class="auth-logo">GR&#198;S</div>
+    <div class="auth-sub">ゴルフスコア管理アプリ</div>
+    <div id="auth-err" class="err-msg"></div>
+    <div class="auth-card">
+      <div class="auth-title">ログイン</div>
+      <div style="display:flex;gap:5px;margin-bottom:12px;">
+        <div class="ho ${authMethod==='email'?'sel':''}" style="font-size:10px;padding:7px;" onclick="authMethod='email';renderAuth()">メール</div>
+        <div class="ho ${authMethod==='phone'?'sel':''}" style="font-size:10px;padding:7px;" onclick="authMethod='phone';renderAuth()">電話番号</div>
+      </div>
+      ${authMethod==='email'?`
+        <div class="fld"><div class="fld-lbl">メールアドレス</div><input class="inp" id="l-email" type="email" placeholder="example@email.com"></div>
+        <div class="fld"><div class="fld-lbl">パスワード</div><input class="inp" id="l-pw" type="password" placeholder="パスワード" onkeydown="if(event.key==='Enter')doLogin()"></div>
+        <div style="text-align:right;margin-bottom:8px;"><span style="font-size:8px;color:#3B6D11;cursor:pointer;" onclick="doResetPassword()">パスワードを忘れた方</span></div>
+        <button class="auth-btn" onclick="doLogin()">ログイン</button>
+      `:`
+        <div class="fld"><div class="fld-lbl">電話番号</div>
+          <div class="fld-row"><span style="font-size:11px;padding:7px 8px;background:#f5f5f0;border:.5px solid #e0ddd5;border-radius:7px 0 0 7px;border-right:none;">+81</span>
+          <input class="inp" id="l-phone" type="tel" placeholder="090-0000-0000" style="border-radius:0 7px 7px 0;"></div></div>
+        <button class="auth-btn" onclick="doLoginPhone()">SMS認証コードを送る</button>
+      `}
+    </div>
+    <div class="auth-switch">アカウントをお持ちでない方は <span onclick="authScreen='register';renderAuth()">新規登録</span></div>
+  </div>`;
+}
+
+function registerHTML(){
+  return`<div class="auth-wrap">
+    <div class="auth-logo">GR&#198;S</div>
+    <div class="auth-sub">新規アカウント作成</div>
+    <div id="auth-err" class="err-msg"></div>
+    <div class="auth-card">
+      <div class="auth-title">基本情報</div>
+      <div class="fld"><div class="fld-lbl">お名前</div><input class="inp" id="r-name" type="text" placeholder="田中 太郎"></div>
+      <div class="fld"><div class="fld-lbl">ユーザーID</div>
+        <div class="fld-row"><span style="font-size:11px;padding:7px 6px;background:#f5f5f0;border:.5px solid #e0ddd5;border-radius:7px 0 0 7px;border-right:none;color:#999890;">@</span>
+        <input class="inp" id="r-handle" type="text" placeholder="tanaka_golf" style="border-radius:0 7px 7px 0;"></div></div>
+      <div class="fld"><div class="fld-lbl">ゴルフ歴（開始年）</div><input class="inp" id="r-since" type="text" placeholder="例：2020"></div>
+      <div style="height:.5px;background:#f0ede8;margin:10px 0;"></div>
+      <div class="auth-title" style="margin-bottom:8px;">ログイン情報</div>
+      <div class="fld"><div class="fld-lbl">メールアドレス</div><input class="inp" id="r-email" type="email" placeholder="example@email.com"></div>
+      <div class="fld"><div class="fld-lbl">電話番号（任意）</div>
+        <div class="fld-row"><span style="font-size:11px;padding:7px 8px;background:#f5f5f0;border:.5px solid #e0ddd5;border-radius:7px 0 0 7px;border-right:none;">+81</span>
+        <input class="inp" id="r-phone" type="tel" placeholder="090-0000-0000" style="border-radius:0 7px 7px 0;"></div></div>
+      <div class="fld"><div class="fld-lbl">パスワード（8文字以上）</div><input class="inp" id="r-pw" type="password" placeholder="パスワード"></div>
+      <div class="fld"><div class="fld-lbl">パスワード（確認）</div><input class="inp" id="r-pw2" type="password" placeholder="もう一度入力"></div>
+      <button class="auth-btn green" onclick="doRegister()">アカウントを作成</button>
+    </div>
+    <div class="auth-switch">すでにアカウントをお持ちの方は <span onclick="authScreen='login';renderAuth()">ログイン</span></div>
+  </div>`;
+}
+
+function otpHTML(){
+  return`<div class="auth-wrap">
+    <div class="auth-logo">GR&#198;S</div>
+    <div class="auth-sub">SMS認証コードを入力</div>
+    <div id="auth-err" class="err-msg"></div>
+    <div class="auth-card">
+      <div style="text-align:center;font-size:9px;color:#999890;margin-bottom:14px;">送信された6桁のコードを入力してください</div>
+      <div class="otp-grid">
+        ${[0,1,2,3,4,5].map(i=>`<input class="otp-box" id="o${i}" maxlength="1" oninput="otpMove(${i})" type="tel">`).join('')}
+      </div>
+      <button class="auth-btn" onclick="verifyOTP()">認証する</button>
+    </div>
+    <div class="auth-switch"><span onclick="authScreen='login';renderAuth()">← 戻る</span></div>
+  </div>`;
+}
+
+function verifyEmailHTML(){
+  return`<div class="auth-wrap">
+    <div class="auth-logo">GR&#198;S</div>
+    <div style="text-align:center;margin:20px 0;">
+      <div style="font-size:32px;margin-bottom:12px;">📧</div>
+      <div style="font-size:12px;font-weight:500;color:#1a1a1a;margin-bottom:8px;">確認メールを送信しました</div>
+      <div style="font-size:9px;color:#999890;line-height:1.6;">メールのリンクをクリックして<br>アカウントを有効化してください</div>
+    </div>
+    <div class="auth-card" style="margin:0 0 12px;">
+      <div style="font-size:8.5px;color:#666;line-height:1.7;">
+        ✓ 迷惑メールフォルダもご確認ください<br>
+        ✓ 有効化後、自動的にログインされます
+      </div>
+    </div>
+    <button class="auth-btn outline" onclick="authScreen='login';renderAuth()">ログイン画面に戻る</button>
+  </div>`;
+}
+
+function showAuthError(msg){
+  const el=document.getElementById('auth-err');
+  if(el){el.textContent=msg;el.classList.add('on');}
+}
+
+/* ===== 認証処理（Supabase） ===== */
+async function doLogin(){
+  const email=document.getElementById('l-email')?.value.trim()||'';
+  const pw=document.getElementById('l-pw')?.value||'';
+  if(!email){showAuthError('メールアドレスを入力してください');return;}
+  if(!pw){showAuthError('パスワードを入力してください');return;}
+  showLoading('ログイン中...');
+  const {data,error} = await sb.auth.signInWithPassword({email,password:pw});
+  hideLoading();
+  if(error){showAuthError(error.message==='Invalid login credentials'?'メールアドレスまたはパスワードが間違っています':error.message);return;}
+  /* onAuthStateChange が処理する */
+}
+
+async function doLoginPhone(){
+  const rawPhone=document.getElementById('l-phone')?.value.trim()||'';
+  if(!rawPhone){showAuthError('電話番号を入力してください');return;}
+  const phone='+81'+rawPhone.replace(/^0/,'').replace(/-/g,'');
+  showLoading('SMS送信中...');
+  const {error} = await sb.auth.signInWithOtp({phone});
+  hideLoading();
+  if(error){showAuthError(error.message);return;}
+  authScreen='otp';
+  window._otpPhone=phone;
+  renderAuth();
+  toast('SMSを送信しました');
+}
+
+async function verifyOTP(){
+  const code=[0,1,2,3,4,5].map(i=>document.getElementById('o'+i)?.value||'').join('');
+  if(code.length<6){showAuthError('6桁のコードを入力してください');return;}
+  showLoading('認証中...');
+  const {error} = await sb.auth.verifyOtp({phone:window._otpPhone, token:code, type:'sms'});
+  hideLoading();
+  if(error){showAuthError(error.message);return;}
+  /* onAuthStateChange が処理する */
+}
+
+async function doRegister(){
+  const name=document.getElementById('r-name')?.value.trim()||'';
+  const handle=document.getElementById('r-handle')?.value.trim()||'';
+  const since=document.getElementById('r-since')?.value.trim()||'';
+  const email=document.getElementById('r-email')?.value.trim()||'';
+  const phone=document.getElementById('r-phone')?.value.trim()||'';
+  const pw=document.getElementById('r-pw')?.value||'';
+  const pw2=document.getElementById('r-pw2')?.value||'';
+  if(!name){showAuthError('お名前を入力してください');return;}
+  if(!email){showAuthError('メールアドレスを入力してください');return;}
+  if(pw.length<8){showAuthError('パスワードは8文字以上にしてください');return;}
+  if(pw!==pw2){showAuthError('パスワードが一致しません');return;}
+  showLoading('アカウント作成中...');
+  /* Supabase Auth でユーザー作成 */
+  const {data,error} = await sb.auth.signUp({
+    email, password:pw,
+    options:{data:{name,handle}}
+  });
+  if(error){hideLoading();showAuthError(error.message);return;}
+  /* プロフィールを保存（トリガーで自動作成されるが上書き） */
+  if(data.user){
+    await sb.from('profiles').upsert({
+      id:data.user.id, name, handle:handle||'golf_user',
+      since:since||'', phone:phone||''
+    });
+  }
+  hideLoading();
+  authScreen='verify-email';
+  renderAuth();
+}
+
+async function doResetPassword(){
+  const email=document.getElementById('l-email')?.value.trim()||'';
+  if(!email){showAuthError('メールアドレスを入力してください');return;}
+  showLoading('送信中...');
+  const {error} = await sb.auth.resetPasswordForEmail(email);
+  hideLoading();
+  if(error){showAuthError(error.message);return;}
+  toast('パスワードリセットメールを送信しました');
+}
+
+async function doLogout(){
+  showLoading('ログアウト中...');
+  await sb.auth.signOut();
+  hideLoading();
+  /* onAuthStateChange が処理する */
+}
+
+function otpMove(i){const v=document.getElementById('o'+i).value;if(v&&i<5)document.getElementById('o'+(i+1)).focus();}
+
+/* ===== ラウンド保存（Supabase） ===== */
+async function saveScoreToSupabase(){
+  if(!currentUser) return;
+  const d=new Date();
+  const dateStr=d.getFullYear()+'/'+(d.getMonth()+1).toString().padStart(2,'0')+'/'+d.getDate().toString().padStart(2,'0');
+  setSyncStatus('saving');
+  /* 写真アップロード */
+  let photoUrl=null;
+  if(pendingImgFile){
+    const ext=pendingImgFile.name.split('.').pop();
+    const path=`${currentUser.id}/${Date.now()}.${ext}`;
+    const {data:upData,error:upErr} = await sb.storage.from('round-photos').upload(path,pendingImgFile);
+    if(!upErr){
+      const {data:{publicUrl}} = sb.storage.from('round-photos').getPublicUrl(path);
+      photoUrl=publicUrl;
+    }
+  }
+  const {data,error} = await sb.from('rounds').insert({
+    user_id: currentUser.id,
+    date: dateStr,
+    course: courseName||'未設定',
+    holes,
+    score_arr: scores.slice(0,holes),
+    par_arr: pars.slice(0,holes),
+    photo_url: photoUrl,
+  }).select().single();
+  if(error){setSyncStatus('offline');toast('保存に失敗しました',true);return;}
+  /* ローカルに追加 */
+  rounds.unshift({
+    id:data.id,date:dateStr,course:courseName||'未設定',
+    holes,img:photoUrl,scoreArr:[...scores.slice(0,holes)],parArr:[...pars.slice(0,holes)],_dbId:data.id
+  });
+  setSyncStatus('saved');
+  setTimeout(()=>setSyncStatus(''),2000);
+  setupDone=false;courseName='';holes=18;pars=[...P18];scores=[...P18];pendingImgFile=null;pendingImgPreview=null;
+  toast('スコアを保存しました ✓');
+  setTimeout(()=>go('home'),600);
+}
+
+/* ===== ラウンド写真更新（Supabase） ===== */
+async function uploadRoundPhoto(file,roundId){
+  if(!currentUser||!file) return null;
+  const ext=file.name.split('.').pop();
+  const path=`${currentUser.id}/${roundId}_${Date.now()}.${ext}`;
+  const {error} = await sb.storage.from('round-photos').upload(path,file);
+  if(error){toast('写真のアップロードに失敗しました',true);return null;}
+  const {data:{publicUrl}} = sb.storage.from('round-photos').getPublicUrl(path);
+  await sb.from('rounds').update({photo_url:publicUrl}).eq('id',roundId);
+  return publicUrl;
+}
+
+/* ===== アバター更新（Supabase） ===== */
+async function uploadAvatar(file){
+  if(!currentUser||!file) return;
+  const ext=file.name.split('.').pop();
+  const path=`${currentUser.id}/avatar.${ext}`;
+  showLoading('画像をアップロード中...');
+  const {error} = await sb.storage.from('avatars').upload(path,file,{upsert:true});
+  if(error){hideLoading();toast('アップロードに失敗しました',true);return;}
+  const {data:{publicUrl}} = sb.storage.from('avatars').getPublicUrl(path);
+  await sb.from('profiles').update({avatar_url:publicUrl}).eq('id',currentUser.id);
+  if(profile) profile.avatar_url=publicUrl;
+  hideLoading();
+  toast('プロフィール画像を更新しました ✓');
+  rProfile();
+}
+
+/* ===== プロフィール更新（Supabase） ===== */
+async function saveProfileField(field,value){
+  if(!currentUser) return;
+  setSyncStatus('saving');
+  const {error} = await sb.from('profiles').update({[field]:value}).eq('id',currentUser.id);
+  if(error){setSyncStatus('offline');toast('保存に失敗しました',true);return;}
+  if(profile) profile[field]=value;
+  setSyncStatus('saved');
+  setTimeout(()=>setSyncStatus(''),2000);
+  toast('保存しました ✓');
+  openSettings();
+  if(curTab==='profile') rProfile();
+}
+
+/* ===== パスワード変更（Supabase） ===== */
+async function doChangePassword(){
+  const n=document.getElementById('pw-new')?.value||'';
+  const n2=document.getElementById('pw-new2')?.value||'';
+  if(n.length<8){toast('パスワードは8文字以上です',true);return;}
+  if(n!==n2){toast('パスワードが一致しません',true);return;}
+  showLoading('変更中...');
+  const {error} = await sb.auth.updateUser({password:n});
+  hideLoading();
+  if(error){toast(error.message,true);return;}
+  toast('パスワードを変更しました ✓');
+  openSettings();
+}
+
+/* ===== タブ・レンダリング ===== */
+const TABS=[
+  {k:'home',label:'ホーム',icon:'<svg viewBox="0 0 24 24" fill="none"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="1.5"/><polyline points="9 22 9 12 15 12 15 22" stroke="currentColor" stroke-width="1.5"/></svg>'},
+  {k:'score',label:'スコア入力',icon:'<svg viewBox="0 0 24 24" fill="none"><rect x="5" y="2" width="14" height="20" rx="3" stroke="currentColor" stroke-width="1.5"/><line x1="9" y1="8" x2="15" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'},
+  {k:'profile',label:'プロフィール',icon:'<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'},
+];
+function buildTbar(){document.getElementById('tbar').innerHTML=TABS.map(t=>{const act=curTab===t.k||(['sv','detail'].includes(curTab)&&t.k==='home');return`<div class="tb ${act?'act':''}" onclick="go('${t.k}')">${t.icon}<span>${t.label}</span></div>`;}).join('');}
+function go(k){curTab=k;render();}
+function render(){
+  if(!currentUser){renderAuth();return;}
+  buildTbar();
+  if(curTab==='home')rHome();
+  else if(curTab==='score')rScore();
+  else if(curTab==='profile')rProfile();
+  else if(curTab==='sv')rStamp();
+  else rDetail();
+  document.getElementById('scr').scrollTop=0;
+}
+
+/* ===== ユーティリティ ===== */
+function moveItem(i,dir){const j=i+dir;if(j<0||j>=stampLayout.length)return;[stampLayout[i],stampLayout[j]]=[stampLayout[j],stampLayout[i]];rStamp();}
+function toggleVis(i){if(stampLayout[i].required)return;stampLayout[i].vis=!stampLayout[i].vis;rStamp();}
+function calcScore(r){return r.scoreArr.reduce((a,b)=>a+b,0);}
+function calcPar(r){return r.parArr.reduce((a,b)=>a+b,0);}
+function calcDiff(r){return calcScore(r)-calcPar(r);}
+function fmtDiff(d){return d===0?'E':(d>0?'+':'')+d;}
+function abbr(n){return n.replace(/カントリークラブ/g,'CC').replace(/ゴルフ倶楽部/g,'GC').replace(/ゴルフクラブ/g,'GC').substring(0,14);}
+function hdcls(d){if(d<=-4)return'hco';if(d===-3)return'hal';if(d===-2)return'he';if(d===-1)return'hbi';if(d===0)return'hp';if(d===1)return'hbo';if(d===2)return'hw';return'hpl';}
+function hdlbl(d){if(d<=-4)return'C';if(d===-3)return'A';if(d===-2)return'E';if(d===-1)return'B';if(d===0)return'P';return'+'+d;}
+function dotcls(d){if(d<=-4)return'dco';if(d===-3)return'dal';if(d===-2)return'de';if(d===-1)return'db';if(d===0)return'dp';if(d===1)return'dbo';if(d===2)return'dw';return'dpl';}
+function dotlbl(d){return hdlbl(d);}
+function sdlbl(d){if(d<=-4)return'C';if(d===-3)return'A';if(d===-2)return'E';if(d===-1)return'B';if(d===0)return'P';return'+'+d;}
+function dotColor(d){
+  if(d<=-4)return{fill:'rgba(55,138,221,0.75)',text:'#fff'};
+  if(d===-3)return{fill:'rgba(127,119,221,0.75)',text:'#fff'};
+  if(d===-2)return{fill:'rgba(245,168,0,0.80)',text:'#fff'};
+  if(d===-1)return{fill:'rgba(29,184,90,0.80)',text:'#fff'};
+  if(d===0) return{fill:'rgba(45,107,20,0.70)',text:'rgba(255,255,255,0.90)'};
+  if(d===1) return{fill:'rgba(232,48,48,0.75)',text:'#fff'};
+  if(d===2) return{fill:'rgba(160,24,24,0.75)',text:'#fff'};
+  return{fill:'rgba(255,255,255,0.18)',text:'rgba(255,255,255,0.70)'};
+}
+function dotFill(d){return dotColor(d).fill;}
+function dotText(d){return dotColor(d).text;}
+const ICOPY='<rect x="9" y="9" width="13" height="13" rx="2" stroke="#fff" stroke-width="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="#fff" stroke-width="2"/>';
+const IDL='<path d="M12 3v13M5 16l7 7 7-7" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+function mkBtn(label,icon,fn){return`<div class="dlbtn" onclick="${fn}" role="button"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">${icon}</svg><span>${label}</span></div>`;}
+
+/* ===== ホーム ===== */
+function rHome(){
+  if(!rounds.length){document.getElementById('pg').innerHTML='<div class="sh"><span class="st" style="font-family:Georgia,serif;letter-spacing:1px;">GR\u00C6S</span></div><div style="text-align:center;padding:40px 16px;color:#c0bdb5;font-size:9px;">まだラウンド記録がありません</div>';return;}
+  document.getElementById('pg').innerHTML=`<div class="sh"><span class="st" style="font-family:Georgia,serif;letter-spacing:1px;">GR\u00C6S</span><span style="font-size:8px;color:#3B6D11;font-weight:500;">${rounds.length}ラウンド</span></div><div style="height:7px;"></div>${rounds.map(r=>homeCard(r)).join('')}<div style="height:10px;"></div>`;
+}
+function homeCard(r){
+  const score=calcScore(r),diff=calcDiff(r),ds=fmtDiff(diff),dc=diff<0?'#4da829':diff===0?'#3B6D11':diff<=7?'#E24B4A':'#a32d2d';
+  const f9=r.scoreArr.slice(0,9),fp=r.parArr.slice(0,9),b9=r.holes===18?r.scoreArr.slice(9):[],bp=r.holes===18?r.parArr.slice(9):[];
+  const dr=(sa,pa)=>sa.map((s,i)=>{const d=s-pa[i];return`<div class="hd2 ${hdcls(d)}">${hdlbl(d)}</div>`;}).join('');
+  const imgA=r.img?`<div style="width:58px;height:58px;border-radius:8px;overflow:hidden;flex-shrink:0;cursor:pointer;" onclick="openDetail(${r.id})"><img src="${r.img}" style="width:100%;height:100%;object-fit:cover;"></div>`:'';
+  return`<div style="background:#fff;border-radius:11px;margin:0 10px 8px;border:.5px solid #e8e6e0;overflow:hidden;"><div style="padding:9px 11px 8px;display:flex;align-items:flex-start;gap:8px;">${imgA}<div style="flex:1;min-width:0;cursor:pointer;" onclick="openDetail(${r.id})"><div style="font-size:10px;font-weight:500;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${abbr(r.course)}</div><div style="font-size:7.5px;color:#999890;margin-top:1px;">${r.date} &middot; ${r.holes}H</div><div style="display:flex;align-items:center;gap:1.5px;margin-top:5px;"><span style="font-size:6px;color:#3B6D11;width:11px;flex-shrink:0;">前</span>${dr(f9,fp)}</div>${r.holes===18?`<div style="display:flex;align-items:center;gap:1.5px;margin-top:1px;"><span style="font-size:6px;color:#3B6D11;width:11px;flex-shrink:0;">後</span>${dr(b9,bp)}</div>`:''}</div><div style="text-align:right;flex-shrink:0;cursor:pointer;" onclick="openDetail(${r.id})"><span style="font-size:22px;font-weight:500;color:#1a1a1a;line-height:1;">${score}</span><span style="font-size:10px;font-weight:500;color:${dc};margin-left:3px;">${ds}</span></div></div><div style="padding:0 11px 5px;border-top:.5px solid #f5f3f0;display:flex;gap:6px;"><div style="flex:1;background:#f0f8e8;border-radius:7px;padding:5px;text-align:center;cursor:pointer;font-size:8px;color:#3B6D11;font-weight:500;" onclick="openDetail(${r.id})">詳細を見る</div><div style="background:#f0f8e8;border-radius:7px;padding:5px 8px;text-align:center;cursor:pointer;font-size:8px;color:#3B6D11;font-weight:500;" onclick="openStamp(${r.id})">スタンプ</div></div></div>`;
+}
+function openDetail(id){detailTarget=rounds.find(r=>r.id===id)||null;curTab='detail';render();}
+function rDetail(){
+  const r=detailTarget;if(!r){go('home');return;}
+  const score=calcScore(r),par=calcPar(r),diff=calcDiff(r),ds=fmtDiff(diff),dc=diff<=0?'#4da829':'#E24B4A';
+  const f9=r.scoreArr.slice(0,9),fp=r.parArr.slice(0,9),b9=r.holes===18?r.scoreArr.slice(9):[],bp=r.holes===18?r.parArr.slice(9):[];
+  const f9s=f9.reduce((a,b)=>a+b,0),f9p=fp.reduce((a,b)=>a+b,0),b9s=b9.length?b9.reduce((a,b)=>a+b,0):null,b9p=bp.length?bp.reduce((a,b)=>a+b,0):null;
+  function hLabel(d){if(d<=-4)return['Condor','#378ADD','#fff'];if(d===-3)return['Albatross','#7F77DD','#fff'];if(d===-2)return['Eagle','#EF9F27','#fff'];if(d===-1)return['Birdie','rgba(29,158,117,.9)','#fff'];if(d===0)return['Par','#e8f5e0','#3B6D11'];if(d===1)return['Bogey','rgba(226,75,74,.18)','#E24B4A'];if(d===2)return['Double','rgba(162,45,45,.18)','#a32d2d'];return['+'+d,'#f5f5f5','#1a1a1a'];}
+  function holeRow(sa,pa,start){return sa.map((s,i)=>{const d=s-pa[i],h=start+i,[lbl,bg,tc]=hLabel(d);return`<div style="display:flex;align-items:center;padding:5px 12px;border-bottom:.5px solid #f5f3f0;"><span style="font-size:9px;color:#999890;width:28px;">H${h}</span><span style="font-size:8.5px;color:#999890;width:28px;">Par ${pa[i]}</span><div style="flex:1;display:flex;align-items:center;gap:6px;"><span style="font-size:20px;font-weight:500;color:#1a1a1a;line-height:1;">${s}</span><span style="font-size:8px;background:${bg};color:${tc};border-radius:5px;padding:2px 6px;font-weight:500;">${lbl}</span></div><span style="font-size:9px;color:${d<=0?'#4da829':'#E24B4A'};font-weight:500;">${d===0?'E':(d>0?'+':'')+d}</span></div>`;}).join('');}
+  const imgSec=r.img?`<div style="padding:8px 12px 0;"><img src="${r.img}" style="width:100%;border-radius:10px;object-fit:cover;max-height:120px;display:block;"></div>`:'';
+  document.getElementById('pg').innerHTML=`<div class="sh"><div style="display:flex;align-items:center;gap:7px;"><span style="font-size:13px;color:#3B6D11;cursor:pointer;" onclick="go('home')">&larr;</span><span class="st">${abbr(r.course)}</span></div><span style="font-size:8px;color:#999890;">${r.date} &middot; ${r.holes}H</span></div>${imgSec}<div style="background:#fff;padding:10px 12px 8px;border-bottom:.5px solid #eaf3de;"><div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;"><span style="font-size:36px;font-weight:500;color:#1a1a1a;line-height:1;">${score}</span><span style="font-size:14px;font-weight:500;color:${dc};">${ds}</span><span style="font-size:10px;color:#999890;margin-left:4px;">Par ${par}</span></div><div style="display:grid;grid-template-columns:1fr 1fr${r.holes===18?' 1fr 1fr':''};gap:6px;"><div style="background:#f5f5f0;border-radius:8px;padding:6px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:1px;">前半</div><div style="font-size:16px;font-weight:500;color:#1a1a1a;">${f9s}</div><div style="font-size:7px;color:${f9s-f9p<=0?'#4da829':'#E24B4A'};">${fmtDiff(f9s-f9p)}</div></div>${r.holes===18?`<div style="background:#f5f5f0;border-radius:8px;padding:6px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:1px;">後半</div><div style="font-size:16px;font-weight:500;color:#1a1a1a;">${b9s}</div><div style="font-size:7px;color:${b9s-b9p<=0?'#4da829':'#E24B4A'};">${fmtDiff(b9s-b9p)}</div></div>`:''}<div style="background:#f5f5f0;border-radius:8px;padding:6px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:1px;">合計</div><div style="font-size:16px;font-weight:500;color:#1a1a1a;">${score}</div><div style="font-size:7px;color:${dc};">${ds}</div></div><div style="background:#f5f5f0;border-radius:8px;padding:6px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:1px;">Par</div><div style="font-size:16px;font-weight:500;color:#1a1a1a;">${par}</div></div></div></div><div style="background:#fff;margin-top:7px;"><div style="padding:7px 12px 4px;font-size:9px;font-weight:500;color:#3B6D11;">前半 H1&ndash;9</div>${holeRow(f9,fp,1)}${r.holes===18?`<div style="padding:7px 12px 4px;font-size:9px;font-weight:500;color:#3B6D11;margin-top:6px;">後半 H10&ndash;18</div>${holeRow(b9,bp,10)}`:''}</div><div style="padding:8px 10px;margin-top:7px;background:#fff;border-top:.5px solid #eaf3de;"><label class="img-upload-btn" style="width:100%;">${r.img?'写真を変更する':'写真を登録する'}<input type="file" accept="image/*" style="display:none;" onchange="handleDetailPhoto(event,${r.id})"></label></div><div style="padding:5px 10px 10px;background:#fff;"><div style="background:#f0f8e8;border-radius:8px;padding:7px;text-align:center;cursor:pointer;font-size:8.5px;color:#3B6D11;font-weight:500;" onclick="openStamp(${r.id})">スタンプを作る</div></div><div style="height:10px;"></div>`;
+}
+async function handleDetailPhoto(e,roundId){
+  const file=e.target.files[0];if(!file)return;
+  showLoading('写真をアップロード中...');
+  const url=await uploadRoundPhoto(file,roundId);
+  hideLoading();
+  if(url){
+    const r=rounds.find(r=>r.id===roundId);
+    if(r){r.img=url;toast('写真を登録しました ✓');setTimeout(()=>rDetail(),100);}
+  }
+}
+function openStamp(id){stampTarget=rounds.find(r=>r.id===id)||null;curTab='sv';render();}
+
+/* ===== コース図 ===== */
+function drawCourseFull(cv){
+  if(!cv)return;
+  const S=4,ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);ctx.save();ctx.scale(S,S);
+  const r1=new Path2D();r1.ellipse(44,17,43,16,0,0,Math.PI*2);ctx.fillStyle='rgba(26,62,14,0.82)';ctx.fill(r1);
+  const r2=new Path2D();r2.ellipse(44,17,36,12,0,0,Math.PI*2);ctx.fillStyle='rgba(36,85,18,0.80)';ctx.fill(r2);
+  const fw=new Path2D();fw.moveTo(46,2);fw.bezierCurveTo(54,2,63,5,67,11);fw.bezierCurveTo(71,17,70,26,66,31);fw.bezierCurveTo(62,36,55,38,47,38);fw.bezierCurveTo(39,38,30,35,24,30);fw.bezierCurveTo(18,25,10,28,5,30);fw.bezierCurveTo(5,24,6,18,9,13);fw.bezierCurveTo(13,8,20,4,28,2);fw.bezierCurveTo(35,0,40,2,46,2);
+  ctx.fillStyle='rgba(48,108,24,0.84)';ctx.fill(fw);ctx.strokeStyle='rgba(77,168,41,0.55)';ctx.lineWidth=0.4;ctx.stroke(fw);
+  for(let i=0;i<5;i++){ctx.save();ctx.clip(fw);ctx.fillStyle=i%2?'rgba(38,85,18,0.14)':'rgba(60,128,30,0.18)';ctx.fillRect(0,i*7-3,88,7);ctx.restore();}
+  [[22,22,4.5,3],[58,14,4,2.6]].forEach(([bx,by,rx,ry])=>{const b=new Path2D();b.ellipse(bx,by,rx,ry,0,0,Math.PI*2);ctx.fillStyle='rgba(196,162,78,0.90)';ctx.fill(b);const bi=new Path2D();bi.ellipse(bx,by,rx*.7,ry*.65,0,0,Math.PI*2);ctx.fillStyle='rgba(215,182,98,0.65)';ctx.fill(bi);ctx.strokeStyle='rgba(162,132,48,0.72)';ctx.lineWidth=0.4;ctx.stroke(b);});
+  const pond=new Path2D();pond.ellipse(36,24,5.5,3.5,0.3,0,Math.PI*2);ctx.fillStyle='rgba(28,72,172,0.52)';ctx.fill(pond);ctx.strokeStyle='rgba(48,112,200,0.48)';ctx.lineWidth=0.4;ctx.stroke(pond);
+  const gx=7,gy=29;[[7,5.5,'rgba(30,140,44,0.94)','rgba(16,110,32,0.92)',0.8],[4.8,3.8,'rgba(50,170,58,0.78)',null,0],[2.8,2.2,'rgba(70,200,72,0.58)',null,0]].forEach(([rx,ry,fill,str,lw])=>{const g=new Path2D();g.ellipse(gx,gy,rx,ry,0,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill(g);if(str){ctx.strokeStyle=str;ctx.lineWidth=lw;ctx.stroke(g);}});
+  ctx.fillStyle='rgba(10,88,20,0.96)';ctx.beginPath();ctx.arc(gx,gy,1.5,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,0.80)';ctx.lineWidth=0.7;ctx.beginPath();ctx.moveTo(gx,gy);ctx.lineTo(gx,gy-7);ctx.stroke();
+  ctx.fillStyle='rgba(255,30,30,0.96)';ctx.beginPath();ctx.moveTo(gx,gy-7);ctx.lineTo(gx+2.8,gy-4.5);ctx.lineTo(gx,gy-2);ctx.closePath();ctx.fill();
+  ctx.fillStyle='rgba(40,120,35,0.68)';ctx.strokeStyle='rgba(100,190,50,0.92)';ctx.lineWidth=0.9;
+  const te=new Path2D();try{te.roundRect(41,0,12,7,2);}catch(e2){te.rect(41,0,12,7);}ctx.fill(te);ctx.stroke(te);
+  ctx.fillStyle='rgba(55,150,28,0.96)';ctx.beginPath();ctx.arc(47,3.5,2.4,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+}
+
+/* ===== スタンプ ===== */
+function stampInner(r,isDark){
+  const score=calcScore(r),diff=calcDiff(r),ds=fmtDiff(diff);
+  const dc=diff<=0?'rgba(77,168,41,0.92)':'rgba(226,75,74,0.92)';
+  const diffBg=diff<=0?'rgba(77,168,41,0.18)':'rgba(226,75,74,0.18)';
+  const diffBorder=diff<=0?'rgba(77,168,41,0.60)':'rgba(226,75,74,0.60)';
+  const f9=r.scoreArr.slice(0,9),fp=r.parArr.slice(0,9),b9=r.holes===18?r.scoreArr.slice(9):[],bp=r.holes===18?r.parArr.slice(9):[];
+  const dotRow=(sa,pa)=>sa.map((s,i)=>{const d=s-pa[i],{fill,text}=dotColor(d);return`<div class="shd" style="background:${fill};color:${text};display:flex;align-items:center;justify-content:center;">${sdlbl(d)}</div>`;}).join('');
+  const nlCls=isDark?'nl-d':'nl-t';
+  const numRow=ns=>ns.map(n=>`<div class="${nlCls}">${n}</div>`).join('');
+  const gc=isDark?'#7dd44a':'#3B6D11';
+  const lc=isDark?'rgba(255,255,255,0.42)':'rgba(255,255,255,0.60)';
+  const cc=isDark?'rgba(255,255,255,0.65)':'rgba(255,255,255,0.80)';
+  const uid='cv'+(Math.random()*1e9|0);
+  setTimeout(()=>drawCourseFull(document.getElementById(uid)),80);
+  const PARTS={
+    score:()=>`<div style="color:${lc};font-size:7px;font-weight:500;letter-spacing:0.16em;margin-bottom:2px;text-align:center;width:88px;">SCORE</div><div style="display:flex;align-items:center;justify-content:center;gap:5px;margin-bottom:4px;width:88px;"><span style="color:#ffffff;font-size:24px;font-weight:700;line-height:1;">${score}</span><span style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;padding:0 4px;height:12px;background:${diffBg};border:0.5px solid ${diffBorder};color:${dc};border-radius:3px;font-size:7px;font-weight:500;flex-shrink:0;">${ds}</span></div>`,
+    course:()=>`<canvas id="${uid}" width="352" height="136" style="width:88px;height:34px;display:block;margin-bottom:5px;"></canvas>`,
+    cname:()=>`<div style="color:${cc};font-size:5.5px;font-weight:500;text-align:center;margin-bottom:4px;max-width:88px;">${abbr(r.course)}</div>`,
+    front9:()=>`<div class="ng" style="margin-bottom:3px;">${numRow([1,2,3,4,5,6,7,8,9])}</div><div class="ng" style="margin-bottom:2px;">${dotRow(f9,fp)}</div>`,
+    back9:()=>r.holes===18?`<div class="ng" style="margin-bottom:3px;">${numRow([10,11,12,13,14,15,16,17,18])}</div><div class="ng" style="margin-bottom:5px;">${dotRow(b9,bp)}</div>`:'',
+    logo:()=>`<div style="font-family:Georgia,serif;font-size:6px;font-weight:600;letter-spacing:0.18em;color:${gc};">GR&#198;S</div>`,
+  };
+  return stampLayout.filter(el=>el.vis).map(el=>PARTS[el.id]?.()??'').join('');
+}
+function buildEditor(){
+  return`<div class="edit-section"><div class="edit-hd"><span>要素の順番・表示</span><span class="edit-hint">▲▼で並び替え</span></div>${stampLayout.map((el,i)=>{const isFirst=i===0,isLast=i===stampLayout.length-1;return`<div class="eitem"><div class="arr-group"><div class="arr ${isFirst?'disabled':''}" onclick="moveItem(${i},-1)">▲</div><div class="arr ${isLast?'disabled':''}" onclick="moveItem(${i},1)">▼</div></div><span class="eitem-lbl">${el.label}</span>${el.required?`<span style="font-size:7px;background:#f5f5f0;color:#aaa;border-radius:4px;padding:1px 5px;">固定</span>`:''}<div class="vis-toggle ${el.vis?'on':''}" style="opacity:${el.required?0.4:1};pointer-events:${el.required?'none':'auto'};" onclick="toggleVis(${i})"></div></div>`;}).join('')}</div>`;
+}
+function rStamp(){
+  const r=stampTarget;if(!r){go('home');return;}
+  const score=calcScore(r),diff=calcDiff(r),ds=fmtDiff(diff),dc=diff<=0?'#4da829':'#E24B4A';
+  document.getElementById('pg').innerHTML=`<div class="sh"><div style="display:flex;align-items:center;gap:7px;"><span style="font-size:13px;color:#3B6D11;cursor:pointer;" onclick="go('home')">&larr;</span><span class="st">スタンプ作成</span></div><span style="font-size:8px;background:#f0f8e8;color:#27500A;border-radius:5px;padding:2px 6px;font-weight:500;">T-041</span></div><div style="background:#fff;padding:6px 12px;border-bottom:.5px solid #eaf3de;font-size:9px;color:#999890;">${abbr(r.course)} &middot; ${r.holes}H &middot; <span style="color:#1a1a1a;font-weight:500;">${score}</span> <span style="color:${dc};">${ds}</span></div><div class="srow"><div class="scol"><div class="checker stt" id="stamp-t">${stampInner(r,false)}</div><span class="slb">透過</span></div><div class="scol"><div class="std" id="stamp-d">${stampInner(r,true)}</div><span class="slb">黒スタンプ</span></div></div>${buildEditor()}<div class="dlsec"><div class="dlsec-lbl">透過スタンプ</div><div class="dlrow">${mkBtn('クリップボードにコピー',ICOPY,"copyToClipboard('transparent')")}${mkBtn('写真に保存',IDL,"saveToPhotos('transparent')")}</div><div class="dlsec-lbl" style="margin-top:4px;">黒スタンプ</div><div class="dlrow">${mkBtn('クリップボードにコピー',ICOPY,"copyToClipboard('dark')")}${mkBtn('写真に保存',IDL,"saveToPhotos('dark')")}</div></div><div style="height:10px;"></div>`;
+}
+function renderStampToCanvas(r,isDark){
+  const S=5,PAD=14,CW=112;
+  let contentH=0;
+  if(stampLayout.find(e=>e.id==='score'&&e.vis))contentH+=10+28;
+  if(stampLayout.find(e=>e.id==='course'&&e.vis))contentH+=40;
+  if(stampLayout.find(e=>e.id==='cname'&&e.vis))contentH+=10;
+  if(stampLayout.find(e=>e.id==='front9'&&e.vis))contentH+=14;
+  if(stampLayout.find(e=>e.id==='back9'&&e.vis)&&r.holes===18)contentH+=14;
+  if(stampLayout.find(e=>e.id==='logo'&&e.vis))contentH+=10;
+  const VPAD=isDark?18:8;
+  const cH=contentH+VPAD*2;
+  const W=(CW+PAD*2)*S,H=cH*S;
+  const c=document.createElement('canvas');c.width=W;c.height=H;
+  const ctx=c.getContext('2d',{alpha:true});
+  ctx.clearRect(0,0,W,H);
+  if(isDark){ctx.save();ctx.beginPath();const rad=12*S;ctx.moveTo(rad,0);ctx.lineTo(W-rad,0);ctx.quadraticCurveTo(W,0,W,rad);ctx.lineTo(W,H-rad);ctx.quadraticCurveTo(W,H,W-rad,H);ctx.lineTo(rad,H);ctx.quadraticCurveTo(0,H,0,H-rad);ctx.lineTo(0,rad);ctx.quadraticCurveTo(0,0,rad,0);ctx.closePath();ctx.fillStyle='rgba(6,14,4,0.72)';ctx.fill();ctx.strokeStyle='rgba(77,168,41,0.30)';ctx.lineWidth=S*0.5;ctx.stroke();ctx.restore();}
+  ctx.save();ctx.scale(S,S);ctx.translate(PAD,0);
+  const score=calcScore(r),diff=calcDiff(r),ds=fmtDiff(diff);
+  const f9=r.scoreArr.slice(0,9),fp=r.parArr.slice(0,9),b9=r.holes===18?r.scoreArr.slice(9):[],bp=r.holes===18?r.parArr.slice(9):[];
+  const cvs=document.querySelectorAll('canvas[id^="cv"]');
+  let y=VPAD;
+  function ddr(sa,pa,nums,sy){
+    const DR=4,G=2,rw=sa.length*(DR*2+G)-G,sx=(CW-rw)/2;
+    ctx.fillStyle='rgba(255,255,255,0.40)';ctx.font='3.5px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    nums.forEach((n,i)=>ctx.fillText(String(n),sx+i*(DR*2+G)+DR,sy));sy+=7;
+    sa.forEach((s,i)=>{const d=s-pa[i],x=sx+i*(DR*2+G)+DR;ctx.beginPath();ctx.arc(x,sy,DR,0,Math.PI*2);ctx.fillStyle=dotFill(d);ctx.fill();ctx.fillStyle=dotText(d);ctx.font='bold 3.2px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(sdlbl(d),x,sy);});
+    return sy+DR+3;
+  }
+  const dc2=diff<=0?'rgba(77,168,41,0.92)':'rgba(226,75,74,0.92)';
+  const diffBg=diff<=0?'rgba(77,168,41,0.18)':'rgba(226,75,74,0.18)';
+  const lc=isDark?'rgba(255,255,255,0.42)':'rgba(255,255,255,0.60)';
+  const gc=isDark?'#7dd44a':'#3B6D11';
+  const cc=isDark?'rgba(255,255,255,0.65)':'rgba(255,255,255,0.80)';
+  stampLayout.filter(el=>el.vis).forEach(el=>{
+    if(el.id==='score'){ctx.fillStyle=lc;ctx.font='500 7px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('SCORE',CW/2,y);y+=10;const FS=24;ctx.font=`700 ${FS}px sans-serif`;const sM=ctx.measureText(String(score));const sW=sM.width;ctx.font='500 7px sans-serif';const bW=Math.max(ctx.measureText(ds).width+8,18);const tot=sW+4+bW,sX=(CW-tot)/2,SCY=y+12;const sBY=SCY+(sM.actualBoundingBoxAscent||FS*0.72)/2;ctx.font=`700 ${FS}px sans-serif`;ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.fillStyle='#ffffff';ctx.fillText(String(score),sX,sBY);const bH=11,bX=sX+sW+4,bY=SCY-bH/2;ctx.fillStyle=diffBg;ctx.beginPath();ctx.rect(bX,bY,bW,bH);ctx.fill();ctx.strokeStyle=dc2;ctx.lineWidth=0.5;ctx.stroke();ctx.font='500 7px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=dc2;ctx.fillText(ds,bX+bW/2,bY+bH/2);y+=28;}
+    else if(el.id==='course'){if(cvs.length>0){const src=isDark?cvs[1]:cvs[0];if(src&&src.width>0)ctx.drawImage(src,0,y,88,34);}y+=40;}
+    else if(el.id==='cname'){ctx.fillStyle=cc;ctx.font='500 5.5px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(abbr(r.course),CW/2,y);y+=10;}
+    else if(el.id==='front9'){y=ddr(f9,fp,[1,2,3,4,5,6,7,8,9],y);y+=2;}
+    else if(el.id==='back9'&&r.holes===18){y=ddr(b9,bp,[10,11,12,13,14,15,16,17,18],y);y+=2;}
+    else if(el.id==='logo'){y+=2;ctx.fillStyle=gc;ctx.font='600 6px Georgia,serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('GR\u00C6S',CW/2,y);}
+  });
+  ctx.restore();return c;
+}
+async function copyToClipboard(type){const r=stampTarget;if(!r)return;try{await new Promise(res=>setTimeout(res,200));const cv=renderStampToCanvas(r,type==='dark');cv.toBlob(async blob=>{try{await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);toast(`${type==='dark'?'黒':'透過'}スタンプをコピー ✓`);}catch(e){const a=document.createElement('a');a.href=cv.toDataURL('image/png',1.0);a.download=`graes-${type}.png`;document.body.appendChild(a);a.click();document.body.removeChild(a);toast('PNG保存しました ✓');}},  'image/png',1.0);}catch(e){toast('エラー',true);}}
+async function saveToPhotos(type){const r=stampTarget;if(!r)return;await new Promise(res=>setTimeout(res,200));const cv=renderStampToCanvas(r,type==='dark');cv.toBlob(blob=>{const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`graes-${type==='dark'?'black':'transparent'}-${r.date.replace(/\//g,'')}.png`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);toast('保存しました ✓');},'image/png',1.0);}
+
+/* ===== スコア入力 ===== */
+function adjPar(i,d){pars[i]=Math.max(3,Math.min(5,pars[i]+d));refreshScore();}
+function adj(i,d){scores[i]=Math.max(1,scores[i]+d);refreshScore();}
+function refreshScore(){
+  const tot=scores.slice(0,holes).reduce((a,b)=>a+b,0),par=pars.slice(0,holes).reduce((a,b)=>a+b,0),diff=tot-par,ds=fmtDiff(diff),dc=diff<=0?'#4da829':diff<=7?'#E24B4A':'#a32d2d';
+  const tv=document.getElementById('tot'),dv=document.getElementById('dif'),pv=document.getElementById('par-tot');
+  if(tv)tv.textContent=tot;if(dv){dv.textContent=ds;dv.style.color=dc;}if(pv)pv.textContent=par;
+  pars.slice(0,holes).forEach((p,i)=>{
+    const s=scores[i],dd=s-p;
+    const dot=document.getElementById('dot'+i);if(dot){dot.className='dot '+dotcls(dd);dot.textContent=dotlbl(dd);}
+    const plab=document.getElementById('plab'+i);if(plab)plab.textContent='Par '+p;
+    const pval=document.getElementById('pval'+i);if(pval)pval.textContent=p;
+  });
+}
+function rScore(){
+  if(!setupDone){rSetup();return;}
+  const tot=scores.slice(0,holes).reduce((a,b)=>a+b,0),par=pars.slice(0,holes).reduce((a,b)=>a+b,0);
+  const diff=tot-par,ds=fmtDiff(diff),f9=scores.slice(0,Math.min(9,holes)).reduce((a,b)=>a+b,0);
+  const b9=holes===18?scores.slice(9).reduce((a,b)=>a+b,0):null,dc=diff<=0?'#4da829':diff<=7?'#E24B4A':'#a32d2d';
+  const holeCards=pars.slice(0,holes).map((p,i)=>{const s=scores[i],d=s-p;return`<div class="hc"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;"><span style="font-size:9px;font-weight:500;color:#1a1a1a;">H${i+1}</span><div style="display:flex;align-items:center;gap:4px;"><div class="dot ${dotcls(d)}" id="dot${i}">${dotlbl(d)}</div><span style="font-size:7.5px;color:#999890;" id="plab${i}">Par ${p}</span></div></div><div style="display:flex;align-items:center;gap:6px;"><div class="sq" onclick="adj(${i},-1)">&minus;</div><span style="font-size:16px;font-weight:500;color:#1a1a1a;min-width:24px;text-align:center;" id="sv${i}">${s}</span><div class="sq" onclick="adj(${i},1)">+</div><div style="width:.5px;height:20px;background:#e0ddd5;margin:0 4px;"></div><span style="font-size:7px;color:#999890;">Par</span><div class="psq" onclick="adjPar(${i},-1)">&minus;</div><span style="font-size:13px;font-weight:500;color:#3B6D11;min-width:14px;text-align:center;" id="pval${i}">${p}</span><div class="psq" onclick="adjPar(${i},1)">+</div></div></div>`;}).join('');
+  document.getElementById('pg').innerHTML=`<div class="sh"><span class="st">スコア入力</span><span style="font-size:7.5px;color:#999890;cursor:pointer;" onclick="setupDone=false;render()">コース変更</span></div><div class="sb2"><div class="si"><div class="l">合計</div><div class="v" id="tot">${tot}</div></div><div style="width:.5px;height:20px;background:#f0ede6;"></div><div class="si"><div class="l">差分</div><div class="v" id="dif" style="color:${dc}">${ds}</div></div><div style="width:.5px;height:20px;background:#f0ede6;"></div><div class="si"><div class="l">前半</div><div class="v">${f9}</div></div>${holes===18?`<div style="width:.5px;height:20px;background:#f0ede6;"></div><div class="si"><div class="l">後半</div><div class="v">${b9}</div></div>`:''}<div style="width:.5px;height:20px;background:#f0ede6;"></div><div class="si"><div class="l">Par計</div><div class="v" id="par-tot">${par}</div></div></div><div class="bdg">&#9971; ${courseName||'コース未設定'} &middot; ${holes}H</div><div style="margin:0 10px 6px;"><label class="img-upload-btn">${pendingImgPreview?'写真を変更（登録済み）':'写真を登録する（任意）'}<input type="file" accept="image/*" style="display:none;" onchange="loadPendingImg(event)"></label>${pendingImgPreview?`<div style="margin-top:4px;border-radius:8px;overflow:hidden;width:100%;height:70px;"><img src="${pendingImgPreview}" style="width:100%;height:100%;object-fit:cover;display:block;"></div>`:''}</div><div style="background:#f0f8e8;border:.5px solid #c0dd97;border-radius:7px;padding:4px 9px;margin:0 10px 6px;font-size:7px;color:#3B6D11;">Par横の＋−でホールのParを変更できます（3〜5）</div>${holeCards}<button class="sbtn" onclick="saveScoreToSupabase()">スコアを保存</button><div style="height:10px;"></div>`;
+}
+function loadPendingImg(e){const file=e.target.files[0];if(!file)return;pendingImgFile=file;const reader=new FileReader();reader.onload=ev=>{pendingImgPreview=ev.target.result;rScore();};reader.readAsDataURL(file);}
+function rSetup(){
+  pendingImgFile=null;pendingImgPreview=null;
+  document.getElementById('pg').innerHTML=`<div class="sh"><span class="st">ラウンド設定</span></div><div style="height:8px;"></div><div style="background:#fff;border-radius:10px;border:.5px solid #e8e6e0;margin:0 10px 8px;padding:12px;"><div style="margin-bottom:10px;"><div style="font-size:8px;color:#3B6D11;font-weight:500;margin-bottom:4px;">コース名</div><input class="inp" id="ci" type="text" placeholder="例：霞ヶ関CC 東コース" value="${courseName}"></div><div style="margin-bottom:12px;"><div style="font-size:8px;color:#3B6D11;font-weight:500;margin-bottom:4px;">ホール数</div><div style="display:flex;gap:7px;"><div class="ho ${holes===9?'sel':''}" id="h9" onclick="setH(9)">9H</div><div class="ho ${holes===18?'sel':''}" id="h18" onclick="setH(18)">18H</div></div></div><button style="display:block;width:100%;background:#fff;border:2px solid #4da829;border-radius:10px;padding:10px;color:#1a1a1a;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;" onclick="startRound()">スコア入力スタート &rarr;</button></div>`;
+}
+function setH(n){holes=n;pars=n===9?[...P9]:[...P18];scores=[...pars];document.querySelectorAll('.ho').forEach(e=>e.classList.remove('sel'));document.getElementById('h'+n)?.classList.add('sel');}
+function startRound(){courseName=document.getElementById('ci')?.value.trim()||'';setupDone=true;render();}
+
+/* ===== 設定 ===== */
+function openSettings(){const ov=document.getElementById('settings-overlay');ov.style.display='block';ov.innerHTML=settingsHTML();}
+function closeSettings(){document.getElementById('settings-overlay').style.display='none';}
+function settingsHTML(){
+  const u=profile||{};
+  const email=currentUser?.email||'';
+  const phone=currentUser?.phone||'';
+  return`<div style="min-height:100%;background:#f5f5f0;padding-bottom:20px;">
+    <div style="padding:8px 12px 7px;background:#fff;border-bottom:1.5px solid #eaf3de;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:13px;color:#3B6D11;cursor:pointer;" onclick="closeSettings()">✕</span>
+      <span style="font-size:12px;font-weight:500;color:#1a1a1a;">設定</span>
+    </div>
+    <div style="height:10px;"></div>
+    <div style="padding:0 10px 5px;font-size:8px;color:#999890;font-weight:500;">アカウント</div>
+    <div class="sec-card">
+      <div class="sec-row" onclick="openEditField('name','お名前','${u.name||''}')">
+        <div class="sec-icon" style="background:#eaf3de;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="#3B6D11" stroke-width="1.5"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#3B6D11" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div class="sec-info"><div class="sec-lbl">お名前</div><div class="sec-val">${u.name||'未設定'}</div></div><div class="sec-arrow">›</div>
+      </div>
+      <div class="sec-row" onclick="openEditField('handle','ユーザーID','${u.handle||''}')">
+        <div class="sec-icon" style="background:#eaf3de;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#3B6D11" stroke-width="1.5"/><path d="M15 9a3 3 0 0 0-6 0v2a3 3 0 0 0 6 0" stroke="#3B6D11" stroke-width="1.5"/></svg></div>
+        <div class="sec-info"><div class="sec-lbl">ユーザーID</div><div class="sec-val">@${u.handle||'未設定'}</div></div><div class="sec-arrow">›</div>
+      </div>
+      <div class="sec-row" onclick="openEditField('since','ゴルフ歴（開始年）','${u.since||''}')">
+        <div class="sec-icon" style="background:#eaf3de;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="#3B6D11" stroke-width="1.5"/><line x1="16" y1="2" x2="16" y2="6" stroke="#3B6D11" stroke-width="1.5"/><line x1="8" y1="2" x2="8" y2="6" stroke="#3B6D11" stroke-width="1.5"/></svg></div>
+        <div class="sec-info"><div class="sec-lbl">ゴルフ歴</div><div class="sec-val">${u.since?u.since+'年〜':'未設定'}</div></div><div class="sec-arrow">›</div>
+      </div>
+    </div>
+    <div style="padding:8px 10px 5px;font-size:8px;color:#999890;font-weight:500;">連絡先・認証</div>
+    <div class="sec-card">
+      <div class="sec-row">
+        <div class="sec-icon" style="background:#e8f0fe;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="2" stroke="#4285F4" stroke-width="1.5"/><polyline points="2,4 12,13 22,4" stroke="#4285F4" stroke-width="1.5"/></svg></div>
+        <div class="sec-info"><div class="sec-lbl">メールアドレス</div><div class="sec-val">${email||'未設定'}</div></div>
+        <span class="${currentUser?.email_confirmed_at?'badge-green':'badge-gray'}">${currentUser?.email_confirmed_at?'認証済':'未認証'}</span>
+      </div>
+      <div class="sec-row">
+        <div class="sec-icon" style="background:#e8feee;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" stroke="#1DB85A" stroke-width="1.5"/><circle cx="12" cy="18" r="1" fill="#1DB85A"/></svg></div>
+        <div class="sec-info"><div class="sec-lbl">電話番号</div><div class="sec-val">${phone||'未設定'}</div></div>
+        ${phone?`<span class="badge-green">SMS認証済</span>`:''}
+      </div>
+    </div>
+    <div style="padding:0 10px 5px;font-size:8px;color:#999890;font-weight:500;">セキュリティ</div>
+    <div class="sec-card">
+      <div class="sec-row" onclick="openChangePw()">
+        <div class="sec-icon" style="background:#fef3e8;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="#F5A800" stroke-width="1.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#F5A800" stroke-width="1.5"/></svg></div>
+        <div class="sec-info"><div class="sec-lbl">パスワードを変更</div><div class="sec-val">•••••••••</div></div><div class="sec-arrow">›</div>
+      </div>
+    </div>
+    <div style="padding:0 10px 5px;font-size:8px;color:#999890;font-weight:500;">アプリ情報</div>
+    <div class="sec-card">
+      <div class="sec-row"><div class="sec-icon" style="background:#f5f5f0;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#999890" stroke-width="1.5"/><line x1="12" y1="8" x2="12" y2="12" stroke="#999890" stroke-width="1.5"/><circle cx="12" cy="16" r="1" fill="#999890"/></svg></div>
+        <div class="sec-info"><div class="sec-lbl">バージョン</div><div class="sec-val">T-041 (Supabase)</div></div>
+      </div>
+    </div>
+    <div style="height:4px;"></div>
+    <button class="danger-btn" onclick="doLogout()">ログアウト</button>
+    <div style="height:20px;"></div>
+  </div>`;
+}
+function openEditField(field,label,current){
+  const ov=document.getElementById('settings-overlay');
+  ov.innerHTML=`<div style="min-height:100%;background:#f5f5f0;">
+    <div style="padding:8px 12px 7px;background:#fff;border-bottom:1.5px solid #eaf3de;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:13px;color:#3B6D11;cursor:pointer;" onclick="openSettings()">← 設定</span>
+      <span style="font-size:12px;font-weight:500;color:#1a1a1a;">${label}の変更</span>
+    </div>
+    <div style="padding:16px 12px;">
+      <div style="background:#fff;border-radius:11px;border:.5px solid #e8e6e0;padding:14px;">
+        <div style="font-size:8px;color:#3B6D11;font-weight:500;margin-bottom:6px;">${label}</div>
+        <input class="inp" id="edit-val" type="text" value="${current}" placeholder="${label}を入力">
+        <button class="auth-btn" style="margin-top:10px;" onclick="saveProfileField('${field}',document.getElementById('edit-val').value.trim())">保存する</button>
+      </div>
+    </div>
+  </div>`;
+}
+function openChangePw(){
+  const ov=document.getElementById('settings-overlay');
+  ov.innerHTML=`<div style="min-height:100%;background:#f5f5f0;">
+    <div style="padding:8px 12px 7px;background:#fff;border-bottom:1.5px solid #eaf3de;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:13px;color:#3B6D11;cursor:pointer;" onclick="openSettings()">← 設定</span>
+      <span style="font-size:12px;font-weight:500;color:#1a1a1a;">パスワード変更</span>
+    </div>
+    <div style="padding:16px 12px;">
+      <div style="background:#fff;border-radius:11px;border:.5px solid #e8e6e0;padding:14px;">
+        <div class="fld"><div class="fld-lbl">新しいパスワード</div><input class="inp" type="password" id="pw-new" placeholder="8文字以上"></div>
+        <div class="fld"><div class="fld-lbl">新しいパスワード（確認）</div><input class="inp" type="password" id="pw-new2" placeholder="もう一度入力"></div>
+        <button class="auth-btn" style="margin-top:6px;" onclick="doChangePassword()">変更する</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ===== プロフィール ===== */
+function calPrev(){calMonth--;if(calMonth<0){calMonth=11;calYear--;}rProfile();}
+function calNext(){calMonth++;if(calMonth>11){calMonth=0;calYear++;}rProfile();}
+function rProfile(){
+  const u=profile||{};
+  const full18=rounds.filter(r=>r.holes===18);
+  const best18=full18.length?Math.min(...full18.map(r=>calcScore(r))):null;
+  const avg18=full18.length?Math.round(full18.map(r=>calcScore(r)).reduce((a,b)=>a+b,0)/full18.length):null;
+  const half9=[];rounds.forEach(r=>{if(r.holes===9)half9.push(calcScore(r));else if(r.holes===18){half9.push(r.scoreArr.slice(0,9).reduce((a,b)=>a+b,0));half9.push(r.scoreArr.slice(9).reduce((a,b)=>a+b,0));}});
+  const best9=half9.length?Math.min(...half9):null;
+  const today=nowDate.getDate(),todayY=nowDate.getFullYear(),todayM=nowDate.getMonth();
+  const firstDay=new Date(calYear,calMonth,1).getDay(),lastDate=new Date(calYear,calMonth+1,0).getDate();
+  const mStr=calYear+'/'+(String(calMonth+1).padStart(2,'0'));
+  const roundDays=new Set(rounds.filter(r=>r.date.startsWith(mStr)).map(r=>parseInt(r.date.split('/')[2])));
+  const mNames=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  const dNames=['日','月','火','水','木','金','土'];
+  const calHd=dNames.map((d,i)=>`<div style="font-size:8px;text-align:center;padding:2px 0;color:${i===0?'#E24B4A':i===6?'#4da829':'#999890'};">${d}</div>`).join('');
+  let cells='';for(let i=0;i<firstDay;i++)cells+='<div class="cd"></div>';
+  for(let d=1;d<=lastDate;d++){const has=roundDays.has(d),isToday=d===today&&calYear===todayY&&calMonth===todayM;let cls='cd';if(has)cls+=' has';if(isToday&&!has)cls+=' tod';if(isToday&&has)cls+=' tod has';cells+=`<div class="${cls}">${d}</div>`;}
+  const av=u.avatar_url?`<img src="${u.avatar_url}" style="width:46px;height:46px;border-radius:50%;object-fit:cover;">`:`<span style="font-size:17px;font-weight:500;color:#3B6D11;">${(u.name||'?')[0]}</span>`;
+  const settingsIcon=`<div style="width:28px;height:28px;border-radius:8px;background:#f5f5f0;border:.5px solid #e0ddd5;display:flex;align-items:center;justify-content:center;cursor:pointer;" onclick="openSettings()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="#555" stroke-width="1.5"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="#555" stroke-width="1.5"/></svg></div>`;
+  document.getElementById('pg').innerHTML=`<div style="background:#fff;padding:11px 12px 12px;border-bottom:1.5px solid #eaf3de;">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">${settingsIcon}</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <div style="position:relative;flex-shrink:0;">
+        <div style="width:46px;height:46px;border-radius:50%;background:#eaf3de;border:2px solid #4da829;display:flex;align-items:center;justify-content:center;overflow:hidden;">${av}</div>
+        <label style="position:absolute;bottom:-2px;right:-2px;width:16px;height:16px;border-radius:50%;background:#3B6D11;border:1.5px solid #fff;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
+          <input type="file" accept="image/*" style="display:none;" onchange="handleAvatarUpload(event)">
+        </label>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:14px;font-weight:500;color:#1a1a1a;">${u.name||'ユーザー'}</div>
+        <div style="font-size:9px;color:#999890;">@${u.handle||'user'}${u.since?' &middot; '+u.since+'年〜':''}</div>
+        ${currentUser?.email?`<div style="font-size:8px;color:#bbb;margin-top:1px;">${currentUser.email}</div>`:''}
+      </div>
+      <span style="font-size:7.5px;color:${currentUser?.email_confirmed_at?'#3B6D11':'#bbb'};background:${currentUser?.email_confirmed_at?'#f0f8e8':'#f5f5f0'};border-radius:5px;padding:2px 6px;align-self:flex-start;">${currentUser?.email_confirmed_at?'✓ 認証済':'未認証'}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">
+      <div style="background:#f5f5f0;border-radius:8px;padding:7px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:2px;">ラウンド数</div><div style="font-size:18px;font-weight:500;color:#1a1a1a;">${rounds.length}</div></div>
+      <div style="background:#f5f5f0;border-radius:8px;padding:7px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:2px;">平均(18H)</div><div style="font-size:18px;font-weight:500;color:#1a1a1a;">${avg18??'-'}</div></div>
+      <div style="background:#f5f5f0;border-radius:8px;padding:7px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:2px;">ゴルフ歴</div><div style="font-size:11px;font-weight:500;color:#1a1a1a;margin-top:3px;">${u.since?u.since+'年〜':'-'}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+      <div style="background:#eaf3de;border-radius:8px;padding:7px 8px;text-align:center;border:.5px solid #c0dd97;"><div style="font-size:7px;color:#3B6D11;margin-bottom:2px;">ベスト 18H</div><div style="font-size:20px;font-weight:500;color:#3B6D11;">${best18??'-'}</div></div>
+      <div style="background:#eaf3de;border-radius:8px;padding:7px 8px;text-align:center;border:.5px solid #c0dd97;"><div style="font-size:7px;color:#3B6D11;margin-bottom:1px;">ベスト 9H</div><div style="font-size:20px;font-weight:500;color:#3B6D11;">${best9??'-'}</div><div style="font-size:6px;color:#639922;margin-top:2px;">前後半・9H含む</div></div>
+    </div>
+  </div>
+  <div style="background:#fff;margin-top:7px;border-top:.5px solid #eaf3de;border-bottom:.5px solid #eaf3de;">
+    <div class="cal-nav"><button class="cal-nav-btn" onclick="calPrev()">&lsaquo;</button><span class="cal-nav-title">${calYear}年 ${mNames[calMonth]} <span style="font-size:8px;color:#999890;font-weight:400;">${roundDays.size}回</span></span><button class="cal-nav-btn" onclick="calNext()">&rsaquo;</button></div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);padding:0 8px 2px;">${calHd}</div>
+    <div class="cal-grid">${cells}</div>
+    <div style="display:flex;gap:10px;padding:0 12px 6px;align-items:center;">
+      <div style="display:flex;align-items:center;gap:4px;"><div style="width:9px;height:9px;border-radius:50%;background:#4da829;"></div><span style="font-size:8px;color:#999890;">ラウンド日</span></div>
+      <div style="display:flex;align-items:center;gap:4px;"><div style="width:9px;height:9px;border-radius:50%;border:1.5px solid #3B6D11;"></div><span style="font-size:8px;color:#999890;">今日</span></div>
+    </div>
+  </div>
+  <div style="height:10px;"></div>`;
+}
+function handleAvatarUpload(e){const file=e.target.files[0];if(file)uploadAvatar(file);}
+
+/* ===== 起動 ===== */
+init();
+</script>
+</body>
+</html>
