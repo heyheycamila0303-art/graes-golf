@@ -2,13 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="GRÆSゴルフ">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#f5f5f0">
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231a1a1a'/><text y='.9em' font-size='80' font-family='Georgia' fill='white'>G</text></svg>">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GRÆS Golf App — T-041 (Supabase)</title>
 
 <!--
@@ -79,23 +73,11 @@
 ========================================================
 -->
 
-<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-body{background:#e8e8e8;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;min-height:-webkit-fill-available;padding:20px;padding-top:max(20px, env(safe-area-inset-top));padding-bottom:max(20px, env(safe-area-inset-bottom));font-family:-apple-system,'Hiragino Kaku Gothic ProN','Yu Gothic','Meiryo',sans-serif;}
-/* iPhone PWA時はphoneフレームを非表示 */
-@media (display-mode: standalone) {
-  body{background:#f5f5f0;padding:0;}
-  .wrap{width:100vw;}
-  .phone{width:100%;border-radius:0;border:none;box-shadow:none;height:100vh;height:-webkit-fill-available;}
-  #scr{height:calc(100vh - 90px);height:calc(-webkit-fill-available - 90px);}
-  .sbar{padding-top:max(12px, env(safe-area-inset-top));height:calc(36px + env(safe-area-inset-top));}
-  .tbar{padding-bottom:max(0px, env(safe-area-inset-bottom));height:calc(54px + env(safe-area-inset-bottom));}
-}
-/* タップ時のハイライトを無効化 */
-*{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
-input,button{-webkit-appearance:none;}
+body{background:#e8e8e8;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:20px;font-family:-apple-system,'Hiragino Kaku Gothic ProN','Yu Gothic','Meiryo',sans-serif;}
 .wrap{display:flex;justify-content:center;}
 .phone{width:310px;background:#f5f5f0;border-radius:34px;overflow:hidden;border:5px solid #1a1a1a;box-shadow:0 10px 36px rgba(0,0,0,.35);position:relative;}
 .sbar{height:36px;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:.5px solid #eee;flex-shrink:0;}
@@ -132,9 +114,9 @@ input,button{-webkit-appearance:none;}
 .nl-d{color:rgba(255,255,255,0.38);font-size:3.5px;text-align:center;}
 .nl-t{color:rgba(255,255,255,0.55);font-size:3.5px;text-align:center;}
 .shd{width:8px;height:8px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:3.5px;font-weight:700;}
-.sbtn{display:block;width:calc(100% - 20px);margin:6px 10px 10px;background:#1a1a1a;border:none;border-radius:10px;padding:11px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;-webkit-appearance:none;}
+.sbtn{display:block;width:calc(100% - 20px);margin:6px 10px 10px;background:#1a1a1a;border:none;border-radius:10px;padding:11px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;}
 .sbtn:hover{background:#333;}
-.inp{width:100%;background:#f5f5f0;border:.5px solid #e0ddd5;border-radius:7px;padding:7px 9px;font-size:16px;color:#1a1a1a;outline:none;font-family:inherit;-webkit-appearance:none;}
+.inp{width:100%;background:#f5f5f0;border:.5px solid #e0ddd5;border-radius:7px;padding:7px 9px;font-size:11px;color:#1a1a1a;outline:none;font-family:inherit;}
 .inp:focus{border-color:#4da829;background:#fff;}
 .ho{flex:1;background:#f5f5f0;border:.5px solid #e0ddd5;border-radius:7px;padding:9px;text-align:center;cursor:pointer;font-size:13px;font-weight:500;color:#1a1a1a;}
 .ho.sel{background:#f0f8e8;border:1.5px solid #4da829;color:#3B6D11;}
@@ -179,7 +161,7 @@ input,button{-webkit-appearance:none;}
 .fld{margin-bottom:10px;}
 .fld-lbl{font-size:8px;color:#3B6D11;font-weight:500;margin-bottom:3px;}
 .fld-row{display:flex;align-items:center;}
-.auth-btn{width:100%;background:#1a1a1a;border:none;border-radius:10px;padding:11px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px;-webkit-appearance:none;}
+.auth-btn{width:100%;background:#1a1a1a;border:none;border-radius:10px;padding:11px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px;}
 .auth-btn.green{background:#3B6D11;}
 .auth-btn.outline{background:#fff;border:1.5px solid #1a1a1a;color:#1a1a1a;}
 .auth-switch{text-align:center;font-size:8.5px;color:#999890;margin-top:8px;}
@@ -239,21 +221,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 /* ============================================================ */
 
 const { createClient } = supabase;
-/* persistSession:false でlocalStorageを使わずメモリ内でセッション管理 */
-/* detectSessionInUrl:false でiframe内のURLパース問題を回避 */
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    persistSession: false,
-    detectSessionInUrl: false,
-    autoRefreshToken: true,
-    storageKey: 'graes-golf-t041-' + (Math.random().toString(36).slice(2,8)),
-    storage: {
-      getItem: (key) => { try { return window._sbStorage?.[key] ?? null; } catch(e) { return null; } },
-      setItem: (key, value) => { try { if(!window._sbStorage) window._sbStorage={}; window._sbStorage[key]=value; } catch(e){} },
-      removeItem: (key) => { try { if(window._sbStorage) delete window._sbStorage[key]; } catch(e){} }
-    }
-  }
-});
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ===== アプリ状態 ===== */
 const P9=[4,3,4,5,4,3,4,4,5], P18=[4,4,3,5,4,4,3,5,4,4,3,4,5,4,4,3,5,4];
@@ -308,10 +276,8 @@ function toast(m,err=false){
 
 /* ===== Supabase 認証リスナー ===== */
 sb.auth.onAuthStateChange(async (event, session) => {
-  if((event==='SIGNED_IN' || event==='TOKEN_REFRESHED') && session){
+  if(event==='SIGNED_IN' && session){
     currentUser = session.user;
-    /* メール未確認ユーザーはログインさせない */
-    /* mailer_autoconfirm=true のため email_confirmed_at チェック不要 */
     await loadProfile();
     await loadRounds();
     document.getElementById('tbar').style.display='grid';
@@ -323,83 +289,52 @@ sb.auth.onAuthStateChange(async (event, session) => {
     renderAuth();
   } else if(event==='PASSWORD_RECOVERY'){
     toast('パスワードリセットメールを確認してください');
-  } else if(event==='USER_UPDATED' && session?.user?.email_confirmed_at){
-    /* メール確認完了 */
-    currentUser = session.user;
-    await loadProfile();
-    await loadRounds();
-    document.getElementById('tbar').style.display='grid';
-    render();
-    toast('メールアドレスを確認しました ✓');
   }
 });
 
 /* ===== 初期化 ===== */
 async function init(){
   showLoading('起動中...');
-  try {
-    const {data,error} = await sb.auth.getSession();
-    if(error) throw error;
-    const session = data?.session;
-    if(session){
-      currentUser=session.user;
-      await loadProfile();
-      await loadRounds();
-      document.getElementById('tbar').style.display='grid';
-      hideLoading();
-      render();
-    } else {
-      hideLoading();
-      stopVerifyPoll();
-      renderAuth();
-    }
-  } catch(e) {
+  const {data:{session}} = await sb.auth.getSession();
+  if(session){
+    currentUser=session.user;
+    await loadProfile();
+    await loadRounds();
+    document.getElementById('tbar').style.display='grid';
     hideLoading();
-    console.error('init error:', e);
-    /* ネットワークエラー時もログイン画面を表示 */
+    render();
+  } else {
+    hideLoading();
     renderAuth();
-    if(e.message && e.message !== 'timeout') {
-      setTimeout(()=>toast('接続エラー: '+e.message, true), 500);
-    }
   }
 }
 
 /* ===== プロフィール読み込み ===== */
 async function loadProfile(){
   if(!currentUser) return;
-  try {
-    const {data,error} = await sb.from('profiles').select('*').eq('id',currentUser.id).single();
-    if(data) profile=data;
-    else profile={id:currentUser.id,name:'',handle:'',since:'',phone:'',avatar_url:null};
-  } catch(e) {
-    console.error('loadProfile error:', e);
-    profile={id:currentUser.id,name:'',handle:'',since:'',phone:'',avatar_url:null};
-  }
+  const {data,error} = await sb.from('profiles').select('*').eq('id',currentUser.id).single();
+  if(data) profile=data;
+  else profile={id:currentUser.id,name:'',handle:'',since:'',phone:'',avatar_url:null};
 }
 
 /* ===== ラウンド読み込み ===== */
 async function loadRounds(){
   if(!currentUser) return;
-  try {
-    const {data,error} = await sb.from('rounds')
-      .select('*')
-      .eq('user_id',currentUser.id)
-      .order('created_at',{ascending:false});
-    if(data){
-      rounds = data.map(r=>({
-        id: r.id,
-        date: r.date,
-        course: r.course,
-        holes: r.holes,
-        img: r.photo_url||null,
-        scoreArr: r.score_arr,
-        parArr: r.par_arr,
-        _dbId: r.id,
-      }));
-    }
-  } catch(e) {
-    console.error('loadRounds error:', e);
-    rounds = [];
+  const {data,error} = await sb.from('rounds')
+    .select('*')
+    .eq('user_id',currentUser.id)
+    .order('created_at',{ascending:false});
+  if(data){
+    rounds = data.map(r=>({
+      id: r.id,
+      date: r.date,
+      course: r.course,
+      holes: r.holes,
+      img: r.photo_url||null,
+      scoreArr: r.score_arr,
+      parArr: r.par_arr,
+      _dbId: r.id,
+    }));
   }
 }
 
@@ -437,11 +372,6 @@ function loginHTML(){
       `}
     </div>
     <div class="auth-switch">アカウントをお持ちでない方は <span onclick="authScreen='register';renderAuth()">新規登録</span></div>
-    <div id="unconfirmed-hint" style="display:none;text-align:center;margin-top:8px;">
-      <span style="font-size:8px;color:#3B6D11;cursor:pointer;" onclick="authScreen='verify-email';renderAuth()">
-        確認メールを受け取っていない方はこちら →
-      </span>
-    </div>
   </div>`;
 }
 
@@ -488,119 +418,26 @@ function otpHTML(){
 }
 
 function verifyEmailHTML(){
-  /* ポーリング開始: 5秒ごとにセッション確認 */
-  if(!window._verifyPoll){
-    window._verifyPoll = setInterval(async ()=>{
-      try {
-        const {data:{session}} = await sb.auth.getSession();
-        if(session?.user?.email_confirmed_at){
-          clearInterval(window._verifyPoll);
-          window._verifyPoll = null;
-          currentUser = session.user;
-          await loadProfile();
-          await loadRounds();
-          document.getElementById('tbar').style.display='grid';
-          render();
-          toast('メールアドレスを確認しました ✓');
-        }
-      } catch(e){}
-    }, 5000);
-  }
-  /* 再送信カウントダウン */
-  if(!window._resendCooldown) window._resendCooldown = 0;
-  const email = window._pendingEmail || '';
   return`<div class="auth-wrap">
     <div class="auth-logo">GR&#198;S</div>
-    <div class="auth-sub">メールアドレスの確認</div>
-    <div style="text-align:center;padding:20px 0 16px;">
-      <div style="width:56px;height:56px;background:#eaf3de;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:26px;">📧</div>
-      <div style="font-size:13px;font-weight:600;color:#1a1a1a;margin-bottom:6px;">確認メールを送信しました</div>
-      <div style="font-size:10px;color:#3B6D11;background:#eaf3de;border-radius:8px;padding:6px 12px;display:inline-block;margin-bottom:12px;max-width:240px;word-break:break-all;">${email}</div>
-      <div style="font-size:9px;color:#999890;line-height:1.7;">メール内の「メールアドレスを確認する」を<br>クリックして登録を完了してください</div>
+    <div style="text-align:center;margin:20px 0;">
+      <div style="font-size:32px;margin-bottom:12px;">📧</div>
+      <div style="font-size:12px;font-weight:500;color:#1a1a1a;margin-bottom:8px;">確認メールを送信しました</div>
+      <div style="font-size:9px;color:#999890;line-height:1.6;">メールのリンクをクリックして<br>アカウントを有効化してください</div>
     </div>
-    <div class="auth-card" style="margin:0 0 10px;">
-      <div style="font-size:8.5px;color:#555;line-height:1.9;">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-          <span style="color:#3B6D11;font-size:10px;">✓</span> 迷惑メール（スパム）フォルダもご確認ください
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-          <span style="color:#3B6D11;font-size:10px;">✓</span> リンクの有効期限は24時間です
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;">
-          <span style="color:#3B6D11;font-size:10px;">✓</span> 確認後、自動的にログインされます
-        </div>
+    <div class="auth-card" style="margin:0 0 12px;">
+      <div style="font-size:8.5px;color:#666;line-height:1.7;">
+        ✓ 迷惑メールフォルダもご確認ください<br>
+        ✓ 有効化後、自動的にログインされます
       </div>
     </div>
-    <button class="auth-btn" id="resend-btn" onclick="resendConfirmEmail()" style="background:#3B6D11;margin-bottom:8px;">
-      <span id="resend-txt">確認メールを再送信する</span>
-    </button>
-    <button class="auth-btn outline" onclick="stopVerifyPoll();authScreen='login';renderAuth()">ログイン画面に戻る</button>
+    <button class="auth-btn outline" onclick="authScreen='login';renderAuth()">ログイン画面に戻る</button>
   </div>`;
-}
-
-function stopVerifyPoll(){
-  if(window._verifyPoll){ clearInterval(window._verifyPoll); window._verifyPoll=null; }
-}
-
-async function resendConfirmEmail(){
-  const email = window._pendingEmail;
-  const pw = window._pendingPw;
-  if(!email){ toast('メールアドレスが不明です', true); return; }
-  /* クールダウン確認 */
-  const now = Date.now();
-  if(window._resendCooldown && now < window._resendCooldown){
-    const sec = Math.ceil((window._resendCooldown - now) / 1000);
-    toast(`再送信まで${sec}秒お待ちください`, true);
-    return;
-  }
-  const btn = document.getElementById('resend-btn');
-  const txt = document.getElementById('resend-txt');
-  if(btn) btn.disabled = true;
-  showLoading('再送信中...');
-  try {
-    /* パスワードがある場合: signUp再試行でメール再送 */
-    if(pw){
-      const {error} = await sb.auth.signUp({email, password:pw,
-        options:{emailRedirectTo: window.location.href}});
-      if(error && !error.message.includes('already registered')){
-        throw error;
-      }
-    } else {
-      /* OTPでリンク送信 */
-      const {error} = await sb.auth.resend({type:'signup', email,
-        options:{emailRedirectTo: window.location.href}});
-      if(error) throw error;
-    }
-    hideLoading();
-    toast('確認メールを再送信しました ✓');
-    /* 60秒クールダウン */
-    window._resendCooldown = Date.now() + 60000;
-    let sec = 60;
-    const cd = setInterval(()=>{
-      sec--;
-      if(txt) txt.textContent = `再送信まで${sec}秒`;
-      if(sec <= 0){
-        clearInterval(cd);
-        if(txt) txt.textContent = '確認メールを再送信する';
-        if(btn) btn.disabled = false;
-        window._resendCooldown = 0;
-      }
-    }, 1000);
-  } catch(e){
-    hideLoading();
-    if(btn) btn.disabled = false;
-    toast('再送信エラー: ' + (e.message || '不明'), true);
-  }
 }
 
 function showAuthError(msg){
   const el=document.getElementById('auth-err');
   if(el){el.textContent=msg;el.classList.add('on');}
-  /* メール未確認エラーの場合ヒント表示 */
-  const hint=document.getElementById('unconfirmed-hint');
-  if(hint){
-    hint.style.display = (msg && msg.includes('未確認')) ? 'block' : 'none';
-  }
 }
 
 /* ===== 認証処理（Supabase） ===== */
@@ -612,19 +449,7 @@ async function doLogin(){
   showLoading('ログイン中...');
   const {data,error} = await sb.auth.signInWithPassword({email,password:pw});
   hideLoading();
-  if(error){
-    const msg = error.message==='Invalid login credentials'?'メールアドレスまたはパスワードが間違っています':
-                error.message==='Email not confirmed'?'メールアドレスが未確認です。送信した確認メールのリンクをクリックしてください':
-                (error.message?.includes('fetch')||error.message?.includes('network'))?'通信エラー。インターネット接続を確認してください':
-                error.message;
-    showAuthError(msg);
-    /* 未確認の場合は再送信できるように */
-    if(error.message==='Email not confirmed'){
-      window._pendingEmail = email;
-      window._pendingPw = pw;
-    }
-    return;
-  }
+  if(error){showAuthError(error.message==='Invalid login credentials'?'メールアドレスまたはパスワードが間違っています':error.message);return;}
   /* onAuthStateChange が処理する */
 }
 
@@ -668,7 +493,7 @@ async function doRegister(){
   /* Supabase Auth でユーザー作成 */
   const {data,error} = await sb.auth.signUp({
     email, password:pw,
-    options:{data:{name:name,handle:handle||'golf_user'}}
+    options:{data:{name,handle}}
   });
   if(error){hideLoading();showAuthError(error.message);return;}
   /* プロフィールを保存（トリガーで自動作成されるが上書き） */
@@ -679,9 +504,8 @@ async function doRegister(){
     });
   }
   hideLoading();
-  /* mailer_autoconfirm=true のため確認不要 → 即ログイン */
-  toast('アカウントを作成しました ✓');
-  /* onAuthStateChange が SIGNED_IN を発火して自動ログイン */
+  authScreen='verify-email';
+  renderAuth();
 }
 
 async function doResetPassword(){
@@ -706,7 +530,6 @@ function otpMove(i){const v=document.getElementById('o'+i).value;if(v&&i<5)docum
 /* ===== ラウンド保存（Supabase） ===== */
 async function saveScoreToSupabase(){
   if(!currentUser) return;
-  try {
   const d=new Date();
   const dateStr=d.getFullYear()+'/'+(d.getMonth()+1).toString().padStart(2,'0')+'/'+d.getDate().toString().padStart(2,'0');
   setSyncStatus('saving');
@@ -739,13 +562,8 @@ async function saveScoreToSupabase(){
   setSyncStatus('saved');
   setTimeout(()=>setSyncStatus(''),2000);
   setupDone=false;courseName='';holes=18;pars=[...P18];scores=[...P18];pendingImgFile=null;pendingImgPreview=null;
-    toast('スコアを保存しました ✓');
-    setTimeout(()=>go('home'),600);
-  } catch(e) {
-    setSyncStatus('offline');
-    toast('保存エラー: '+(e.message?.includes('fetch')?'通信エラー':e.message), true);
-    console.error('saveScore error:', e);
-  }
+  toast('スコアを保存しました ✓');
+  setTimeout(()=>go('home'),600);
 }
 
 /* ===== ラウンド写真更新（Supabase） ===== */
@@ -766,40 +584,28 @@ async function uploadAvatar(file){
   const ext=file.name.split('.').pop();
   const path=`${currentUser.id}/avatar.${ext}`;
   showLoading('画像をアップロード中...');
-  try {
-    const {error} = await sb.storage.from('avatars').upload(path,file,{upsert:true});
-    if(error) throw error;
-    const {data:{publicUrl}} = sb.storage.from('avatars').getPublicUrl(path);
-    await sb.from('profiles').update({avatar_url:publicUrl}).eq(eq('id',currentUser.id);
-    if(profile) profile.avatar_url=publicUrl;
-    hideLoading();
-    toast('プロフィール画像を更新しました ✓');
-    rProfile();
-  } catch(e) {
-    hideLoading();
-    toast('アップロードエラー: '+(e.message?.includes('fetch')?'通信エラー':e.message||'不明'), true);
-    console.error('uploadAvatar error:', e);
-  }
+  const {error} = await sb.storage.from('avatars').upload(path,file,{upsert:true});
+  if(error){hideLoading();toast('アップロードに失敗しました',true);return;}
+  const {data:{publicUrl}} = sb.storage.from('avatars').getPublicUrl(path);
+  await sb.from('profiles').update({avatar_url:publicUrl}).eq('id',currentUser.id);
+  if(profile) profile.avatar_url=publicUrl;
+  hideLoading();
+  toast('プロフィール画像を更新しました ✓');
+  rProfile();
 }
 
 /* ===== プロフィール更新（Supabase） ===== */
 async function saveProfileField(field,value){
   if(!currentUser) return;
   setSyncStatus('saving');
-  try {
-    const {error} = await sb.from('profiles').update({[field]:value}).eq('id',currentUser.id);
-    if(error) throw error;
-    if(profile) profile[field]=value;
-    setSyncStatus('saved');
-    setTimeout(()=>setSyncStatus(''),2000);
-    toast('保存しました ✓');
-    openSettings();
-    if(curTab==='profile') rProfile();
-  } catch(e) {
-    setSyncStatus('offline');
-    toast('保存エラー: '+(e.message?.includes('fetch')?'通信エラー':e.message||'不明'), true);
-    console.error('saveProfileField error:', e);
-  }
+  const {error} = await sb.from('profiles').update({[field]:value}).eq('id',currentUser.id);
+  if(error){setSyncStatus('offline');toast('保存に失敗しました',true);return;}
+  if(profile) profile[field]=value;
+  setSyncStatus('saved');
+  setTimeout(()=>setSyncStatus(''),2000);
+  toast('保存しました ✓');
+  openSettings();
+  if(curTab==='profile') rProfile();
 }
 
 /* ===== パスワード変更（Supabase） ===== */
@@ -845,7 +651,7 @@ function fmtDiff(d){return d===0?'E':(d>0?'+':'')+d;}
 function abbr(n){return n.replace(/カントリークラブ/g,'CC').replace(/ゴルフ倶楽部/g,'GC').replace(/ゴルフクラブ/g,'GC').substring(0,14);}
 function hdcls(d){if(d<=-4)return'hco';if(d===-3)return'hal';if(d===-2)return'he';if(d===-1)return'hbi';if(d===0)return'hp';if(d===1)return'hbo';if(d===2)return'hw';return'hpl';}
 function hdlbl(d){if(d<=-4)return'C';if(d===-3)return'A';if(d===-2)return'E';if(d===-1)return'B';if(d===0)return'P';return'+'+d;}
-function dotcls(d){if(d<=-4)return'dco';if(d===-3)return'dal';if(d===-2)return'de';if(d===-1)return'db";if(d===0)return'dp';if(d===1)return'dbo';if(d===2)return'dw';return'dpl';}
+function dotcls(d){if(d<=-4)return'dco';if(d===-3)return'dal';if(d===-2)return'de';if(d===-1)return'db';if(d===0)return'dp';if(d===1)return'dbo';if(d===2)return'dw';return'dpl';}
 function dotlbl(d){return hdlbl(d);}
 function sdlbl(d){if(d<=-4)return'C';if(d===-3)return'A';if(d===-2)return'E';if(d===-1)return'B';if(d===0)return'P';return'+'+d;}
 function dotColor(d){
@@ -885,8 +691,7 @@ function rDetail(){
   function hLabel(d){if(d<=-4)return['Condor','#378ADD','#fff'];if(d===-3)return['Albatross','#7F77DD','#fff'];if(d===-2)return['Eagle','#EF9F27','#fff'];if(d===-1)return['Birdie','rgba(29,158,117,.9)','#fff'];if(d===0)return['Par','#e8f5e0','#3B6D11'];if(d===1)return['Bogey','rgba(226,75,74,.18)','#E24B4A'];if(d===2)return['Double','rgba(162,45,45,.18)','#a32d2d'];return['+'+d,'#f5f5f5','#1a1a1a'];}
   function holeRow(sa,pa,start){return sa.map((s,i)=>{const d=s-pa[i],h=start+i,[lbl,bg,tc]=hLabel(d);return`<div style="display:flex;align-items:center;padding:5px 12px;border-bottom:.5px solid #f5f3f0;"><span style="font-size:9px;color:#999890;width:28px;">H${h}</span><span style="font-size:8.5px;color:#999890;width:28px;">Par ${pa[i]}</span><div style="flex:1;display:flex;align-items:center;gap:6px;"><span style="font-size:20px;font-weight:500;color:#1a1a1a;line-height:1;">${s}</span><span style="font-size:8px;background:${bg};color:${tc};border-radius:5px;padding:2px 6px;font-weight:500;">${lbl}</span></div><span style="font-size:9px;color:${d<=0?'#4da829':'#E24B4A'};font-weight:500;">${d===0?'E':(d>0?'+':'')+d}</span></div>`;}).join('');}
   const imgSec=r.img?`<div style="padding:8px 12px 0;"><img src="${r.img}" style="width:100%;border-radius:10px;object-fit:cover;max-height:120px;display:block;"></div>`:'';
-  document.getElementById('pg').innerHTML=`<div class="sh"><div style="display:flex;align-items:center;gap:7px;"><span style="font-size:13px;color:#3B6D11;cursor:pointer;" onclick="go('home')">&larr;</span><span class="st">${abbr(r.course)}</span></div><span style="font-size:8px;color:#999890;">${r.date} &middot; ${r.holes}H</span></div>${imgSec}<div style="background:#fff;padding:10px 12px 8px;border-bottom:.5px solid #eaf3de;"><div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;"><span style="font-size:36px;font-weight:500;color:#1a1a1a;line-height:1;">${score}</span><span style="font-size:14px;font-weight:500;color:${dc};">${ds}</span><span style="font-size:10px;color:#999890;margin-left:4px;">Par ${par}</span></div><div style="display:grid;grid-template-columns:1fr 1fr${r.holes===18?' 1fr 1fr':''};gap:6px;"><div style="background:#f5f5f0;border-radius:8px;padding:6px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:1px;">前半</div><div style="font-size:16px;font-weight:500;color:#1a1a1a;">${f9s}</div><div style="font-size:7px;color:${f9s-f9p<=0?'#4da829':'#E24B4A'};">${fmtDiff(f9s-f9p)}</div></div>${r.holes===18?`<div style="background:#f5f5f0;border-radius:8px;padding:6px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:1px;">後半</div><div style="font-size:16px;font-weight:500;color:#1a1a1a;">${b9s}</div><div style="font-size:7px;color:${b9s-b9p<=0?'#4da829':'#E24B4A'};">${fmtDiff(b9s-b9p)}</div></div>`:''}
-<div style="background:#f5f5f0;border-radius:8px;padding:6px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:1px;">合計</div><div style="font-size:16px;font-weight:500;color:#1a1a1a;">${score}</div><div style="font-size:7px;color:${dc};">${ds}</div></div><div style="background:#f5f5f0;border-radius:8px;padding:6px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:1px;">Par</div><div style="font-size:16px;font-weight:500;color:#1a1a1a;">${par}</div></div></div></div><div style="background:#fff;margin-top:7px;"><div style="padding:7px 12px 4px;font-size:9px;font-weight:500;color:#3B6D11;">前半 H1&ndash;9</div>${holeRow(f9,fp,1)}${r.holes===18?`<div style="padding:7px 12px 4px;font-size:9px;font-weight:500;color:#3B6D11;margin-top:6px;">後半 H10&ndash;18</div>${holeRow(b9,bp,10)}`:''}</div><div style="padding:8px 10px;margin-top:7px;background:#fff;border-top:.5px solid #eaf3de;"><label class="img-upload-btn" style="width:100%;">${r.img?'憙真を変更する'�_���真を繛錘する'}U<input type="file" accept="image/*" style="display:none;" onchange="handleDetailPhoto(event,${r.id})"></label></div><div style="padding:5px 10px 10px;background:#fff;"><div style="background:#f0f8e8;border-radius:8px;padding:7px;text-align:center;cursor:pointer;font-size:8.5px;color:#3B6D11;font-weight:500;" onclick="openStamp(${r.id})">スタンプを作る</div></div><div style="height:10px;"></div>`;
+  document.getElementById('pg').innerHTML=`<div class="sh"><div style="display:flex;align-items:center;gap:7px;"><span style="font-size:13px;color:#3B6D11;cursor:pointer;" onclick="go('home')">&larr;</span><span class="st">${abbr(r.course)}</span></div><span style="font-size:8px;color:#999890;">${r.date} &middot; ${r.holes}H</span></div>${imgSec}<div style="background:#fff;padding:10px 12px 8px;border-bottom:.5px solid #eaf3de;"><div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;"><span style="font-size:36px;font-weight:500;color:#1a1a1a;line-height:1;">${score}</span><span style="font-size:14px;font-weight:500;color:${dc};">${ds}</span><span style="font-size:10px;color:#999890;margin-left:4px;">Par ${par}</span></div><div style="display:grid;grid-template-columns:1fr 1fr${r.holes===18?' 1fr 1fr':''};gap:6px;"><div style="background:#f5f5f0;border-radius:8px;padding:6px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:1px;">前半</div><div style="font-size:16px;font-weight:500;color:#1a1a1a;">${f9s}</div><div style="font-size:7px;color:${f9s-f9p<=0?'#4da829':'#E24B4A'};">${fmtDiff(f9s-f9p)}</div></div>${r.holes===18?`<div style="background:#f5f5f0;border-radius:8px;padding:6px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:1px;">後半</div><div style="font-size:16px;font-weight:500;color:#1a1a1a;">${b9s}</div><div style="font-size:7px;color:${b9s-b9p<=0?'#4da829':'#E24B4A'};">${fmtDiff(b9s-b9p)}</div></div>`:''}<div style="background:#f5f5f0;border-radius:8px;padding:6px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:1px;">合計</div><div style="font-size:16px;font-weight:500;color:#1a1a1a;">${score}</div><div style="font-size:7px;color:${dc};">${ds}</div></div><div style="background:#f5f5f0;border-radius:8px;padding:6px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:1px;">Par</div><div style="font-size:16px;font-weight:500;color:#1a1a1a;">${par}</div></div></div></div><div style="background:#fff;margin-top:7px;"><div style="padding:7px 12px 4px;font-size:9px;font-weight:500;color:#3B6D11;">前半 H1&ndash;9</div>${holeRow(f9,fp,1)}${r.holes===18?`<div style="padding:7px 12px 4px;font-size:9px;font-weight:500;color:#3B6D11;margin-top:6px;">後半 H10&ndash;18</div>${holeRow(b9,bp,10)}`:''}</div><div style="padding:8px 10px;margin-top:7px;background:#fff;border-top:.5px solid #eaf3de;"><label class="img-upload-btn" style="width:100%;">${r.img?'写真を変更する':'写真を登録する'}<input type="file" accept="image/*" style="display:none;" onchange="handleDetailPhoto(event,${r.id})"></label></div><div style="padding:5px 10px 10px;background:#fff;"><div style="background:#f0f8e8;border-radius:8px;padding:7px;text-align:center;cursor:pointer;font-size:8.5px;color:#3B6D11;font-weight:500;" onclick="openStamp(${r.id})">スタンプを作る</div></div><div style="height:10px;"></div>`;
 }
 async function handleDetailPhoto(e,roundId){
   const file=e.target.files[0];if(!file)return;
@@ -937,7 +742,7 @@ function stampInner(r,isDark){
   const uid='cv'+(Math.random()*1e9|0);
   setTimeout(()=>drawCourseFull(document.getElementById(uid)),80);
   const PARTS={
-    score:()=>`<div style="color:${lc};font-size:7px;font-weight:500;letter-spacing:0.16em;margin-bottom:2px;text-align:center;width:88px;">SCORE</div><div style="display:flex;align-items:center;justify-content:center;gap:5px;margin-bottom:dth:88px;"><span style="color:#ffffff;font-size:24px;font-weight:700;line-height:1;">${score}</span><span style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;padding:0 4px;height:12px;background:${diffBg};border:0.5px solid ${diffBorder};color:${dc};border-radius:3px;font-size:7px;font-weight:500;flex-shrink:0;">${ds}</span></div>`,
+    score:()=>`<div style="color:${lc};font-size:7px;font-weight:500;letter-spacing:0.16em;margin-bottom:2px;text-align:center;width:88px;">SCORE</div><div style="display:flex;align-items:center;justify-content:center;gap:5px;margin-bottom:4px;width:88px;"><span style="color:#ffffff;font-size:24px;font-weight:700;line-height:1;">${score}</span><span style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;padding:0 4px;height:12px;background:${diffBg};border:0.5px solid ${diffBorder};color:${dc};border-radius:3px;font-size:7px;font-weight:500;flex-shrink:0;">${ds}</span></div>`,
     course:()=>`<canvas id="${uid}" width="352" height="136" style="width:88px;height:34px;display:block;margin-bottom:5px;"></canvas>`,
     cname:()=>`<div style="color:${cc};font-size:5.5px;font-weight:500;text-align:center;margin-bottom:4px;max-width:88px;">${abbr(r.course)}</div>`,
     front9:()=>`<div class="ng" style="margin-bottom:3px;">${numRow([1,2,3,4,5,6,7,8,9])}</div><div class="ng" style="margin-bottom:2px;">${dotRow(f9,fp)}</div>`,
@@ -989,7 +794,7 @@ function renderStampToCanvas(r,isDark){
   const cc=isDark?'rgba(255,255,255,0.65)':'rgba(255,255,255,0.80)';
   stampLayout.filter(el=>el.vis).forEach(el=>{
     if(el.id==='score'){ctx.fillStyle=lc;ctx.font='500 7px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('SCORE',CW/2,y);y+=10;const FS=24;ctx.font=`700 ${FS}px sans-serif`;const sM=ctx.measureText(String(score));const sW=sM.width;ctx.font='500 7px sans-serif';const bW=Math.max(ctx.measureText(ds).width+8,18);const tot=sW+4+bW,sX=(CW-tot)/2,SCY=y+12;const sBY=SCY+(sM.actualBoundingBoxAscent||FS*0.72)/2;ctx.font=`700 ${FS}px sans-serif`;ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.fillStyle='#ffffff';ctx.fillText(String(score),sX,sBY);const bH=11,bX=sX+sW+4,bY=SCY-bH/2;ctx.fillStyle=diffBg;ctx.beginPath();ctx.rect(bX,bY,bW,bH);ctx.fill();ctx.strokeStyle=dc2;ctx.lineWidth=0.5;ctx.stroke();ctx.font='500 7px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=dc2;ctx.fillText(ds,bX+bW/2,bY+bH/2);y+=28;}
-    else if(el.id==='course'){if(cvs.length>0){const src=isDark?cvs[1]:cvs[0];if(src&&src.width>0)ctx.drawImage(src,0,y,88,34);}}+=40;}
+    else if(el.id==='course'){if(cvs.length>0){const src=isDark?cvs[1]:cvs[0];if(src&&src.width>0)ctx.drawImage(src,0,y,88,34);}y+=40;}
     else if(el.id==='cname'){ctx.fillStyle=cc;ctx.font='500 5.5px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(abbr(r.course),CW/2,y);y+=10;}
     else if(el.id==='front9'){y=ddr(f9,fp,[1,2,3,4,5,6,7,8,9],y);y+=2;}
     else if(el.id==='back9'&&r.holes===18){y=ddr(b9,bp,[10,11,12,13,14,15,16,17,18],y);y+=2;}
@@ -1020,7 +825,7 @@ function rScore(){
   const diff=tot-par,ds=fmtDiff(diff),f9=scores.slice(0,Math.min(9,holes)).reduce((a,b)=>a+b,0);
   const b9=holes===18?scores.slice(9).reduce((a,b)=>a+b,0):null,dc=diff<=0?'#4da829':diff<=7?'#E24B4A':'#a32d2d';
   const holeCards=pars.slice(0,holes).map((p,i)=>{const s=scores[i],d=s-p;return`<div class="hc"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;"><span style="font-size:9px;font-weight:500;color:#1a1a1a;">H${i+1}</span><div style="display:flex;align-items:center;gap:4px;"><div class="dot ${dotcls(d)}" id="dot${i}">${dotlbl(d)}</div><span style="font-size:7.5px;color:#999890;" id="plab${i}">Par ${p}</span></div></div><div style="display:flex;align-items:center;gap:6px;"><div class="sq" onclick="adj(${i},-1)">&minus;</div><span style="font-size:16px;font-weight:500;color:#1a1a1a;min-width:24px;text-align:center;" id="sv${i}">${s}</span><div class="sq" onclick="adj(${i},1)">+</div><div style="width:.5px;height:20px;background:#e0ddd5;margin:0 4px;"></div><span style="font-size:7px;color:#999890;">Par</span><div class="psq" onclick="adjPar(${i},-1)">&minus;</div><span style="font-size:13px;font-weight:500;color:#3B6D11;min-width:14px;text-align:center;" id="pval${i}">${p}</span><div class="psq" onclick="adjPar(${i},1)">+</div></div></div>`;}).join('');
-  document.getElementById('pg').innerHTML<`<div class="sh"><span class="st">スコア入力</span><span style="font-size:7.5px;color:#999890;cursor:pointer;" onclick="setupDone=false;render()">コース変更</span></div><div class="sb2"><div class="si"><div class="l">合計</div><div class="v" id="tot">${tot}</div></div><div style="width:.5px;height:20px;background:#f0ede6;"></div><div class="si"><div class="l">差分</div><div class="v" id="dif" style="color:${dc}">${ds}</div></div><div style="width:.5px;height:20px;background:#f0ede6;"></div><div class="si"><div class="l">前半</div><div class="v">${f9}</div></div>${holes===18?`<div style="width:.5px;height:20px;background:#f0ede6;"></div><div class="si"><div class="l">後半</div><div class="v">${b9}</div></div>`:''}<div style="width:.5px;height:20px;background:#f0ede6;"></div><div class="si"><div class="l">Par計</div><div class="v" id="par-tot">${par}</div></div></div><div class="bdg">&#9971; ${courseName||'コース未設定'} &middot; ${holes}H</div><div style="margin:0 10px 6px;"><label class="img-upload-btn">${pendingImgPreview?'写真を変更（登録済み）':'写真を登録する（任意）'}<input type="file" accept="image/*" style="display:none;" onchange="loadPendingImg(event)"></label>${pendingImgPreview?`<div style="margin-top:4px;border-radius:8px;overflow:hidden;width:100%;height:70px;"><img src="${pendingImgPreview}" style="width:100%;height:100%;object-fit:cover;display:block;"></div>`:''}</div><div style="background:#f0f8e8;border:.5px solid #c0dd97;border-radius:7px;padding:4px 9px;margin:0 10px 6px;font-size:7px;color:#3B6D11;">Par暪の＋−でホールのParを変更できます（3〜5）</div>${holeCards}<button class="sbtn" onclick="saveScoreToSupabase()">スコアを保存</button><div style="height:10px;"></div>`;
+  document.getElementById('pg').innerHTML=`<div class="sh"><span class="st">スコア入力</span><span style="font-size:7.5px;color:#999890;cursor:pointer;" onclick="setupDone=false;render()">コース変更</span></div><div class="sb2"><div class="si"><div class="l">合計</div><div class="v" id="tot">${tot}</div></div><div style="width:.5px;height:20px;background:#f0ede6;"></div><div class="si"><div class="l">差分</div><div class="v" id="dif" style="color:${dc}">${ds}</div></div><div style="width:.5px;height:20px;background:#f0ede6;"></div><div class="si"><div class="l">前半</div><div class="v">${f9}</div></div>${holes===18?`<div style="width:.5px;height:20px;background:#f0ede6;"></div><div class="si"><div class="l">後半</div><div class="v">${b9}</div></div>`:''}<div style="width:.5px;height:20px;background:#f0ede6;"></div><div class="si"><div class="l">Par計</div><div class="v" id="par-tot">${par}</div></div></div><div class="bdg">&#9971; ${courseName||'コース未設定'} &middot; ${holes}H</div><div style="margin:0 10px 6px;"><label class="img-upload-btn">${pendingImgPreview?'写真を変更（登録済み）':'写真を登録する（任意）'}<input type="file" accept="image/*" style="display:none;" onchange="loadPendingImg(event)"></label>${pendingImgPreview?`<div style="margin-top:4px;border-radius:8px;overflow:hidden;width:100%;height:70px;"><img src="${pendingImgPreview}" style="width:100%;height:100%;object-fit:cover;display:block;"></div>`:''}</div><div style="background:#f0f8e8;border:.5px solid #c0dd97;border-radius:7px;padding:4px 9px;margin:0 10px 6px;font-size:7px;color:#3B6D11;">Par横の＋−でホールのParを変更できます（3〜5）</div>${holeCards}<button class="sbtn" onclick="saveScoreToSupabase()">スコアを保存</button><div style="height:10px;"></div>`;
 }
 function loadPendingImg(e){const file=e.target.files[0];if(!file)return;pendingImgFile=file;const reader=new FileReader();reader.onload=ev=>{pendingImgPreview=ev.target.result;rScore();};reader.readAsDataURL(file);}
 function rSetup(){
@@ -1143,7 +948,7 @@ function rProfile(){
   for(let d=1;d<=lastDate;d++){const has=roundDays.has(d),isToday=d===today&&calYear===todayY&&calMonth===todayM;let cls='cd';if(has)cls+=' has';if(isToday&&!has)cls+=' tod';if(isToday&&has)cls+=' tod has';cells+=`<div class="${cls}">${d}</div>`;}
   const av=u.avatar_url?`<img src="${u.avatar_url}" style="width:46px;height:46px;border-radius:50%;object-fit:cover;">`:`<span style="font-size:17px;font-weight:500;color:#3B6D11;">${(u.name||'?')[0]}</span>`;
   const settingsIcon=`<div style="width:28px;height:28px;border-radius:8px;background:#f5f5f0;border:.5px solid #e0ddd5;display:flex;align-items:center;justify-content:center;cursor:pointer;" onclick="openSettings()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="#555" stroke-width="1.5"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="#555" stroke-width="1.5"/></svg></div>`;
-  document.getElementById('pg').innerHTML<`<div style="background:#fff;padding:11px 12px 12px;border-bottom:1.5px solid #eaf3de;">
+  document.getElementById('pg').innerHTML=`<div style="background:#fff;padding:11px 12px 12px;border-bottom:1.5px solid #eaf3de;">
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">${settingsIcon}</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
       <div style="position:relative;flex-shrink:0;">
@@ -1162,7 +967,7 @@ function rProfile(){
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">
       <div style="background:#f5f5f0;border-radius:8px;padding:7px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:2px;">ラウンド数</div><div style="font-size:18px;font-weight:500;color:#1a1a1a;">${rounds.length}</div></div>
-      <div style="background:#f5f5f0;border-radius:8px;padding:7px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:2px;">鹳均(18H)</div><div style="font-size:18px;font-weight:500;color:#1a1a1a;">${avg18??'-'}</div></div>
+      <div style="background:#f5f5f0;border-radius:8px;padding:7px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:2px;">平均(18H)</div><div style="font-size:18px;font-weight:500;color:#1a1a1a;">${avg18??'-'}</div></div>
       <div style="background:#f5f5f0;border-radius:8px;padding:7px 8px;text-align:center;"><div style="font-size:7px;color:#999890;margin-bottom:2px;">ゴルフ歴</div><div style="font-size:11px;font-weight:500;color:#1a1a1a;margin-top:3px;">${u.since?u.since+'年〜':'-'}</div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
@@ -1171,7 +976,7 @@ function rProfile(){
     </div>
   </div>
   <div style="background:#fff;margin-top:7px;border-top:.5px solid #eaf3de;border-bottom:.5px solid #eaf3de;">
-    <div class="cal-nav"><button class="cal-nav-btn" onclick="calPrev()">&lsaquo;</button><span class="cal-nav-title">${calYear}㹴 ${mNames[calMonth]} <span style="font-size:8px;color:#999890;font-weight:400;">${roundDays.size}回</span></span><button class="cal-nav-btn" onclick="calNext()">&rsaquo;</button></div>
+    <div class="cal-nav"><button class="cal-nav-btn" onclick="calPrev()">&lsaquo;</button><span class="cal-nav-title">${calYear}年 ${mNames[calMonth]} <span style="font-size:8px;color:#999890;font-weight:400;">${roundDays.size}回</span></span><button class="cal-nav-btn" onclick="calNext()">&rsaquo;</button></div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);padding:0 8px 2px;">${calHd}</div>
     <div class="cal-grid">${cells}</div>
     <div style="display:flex;gap:10px;padding:0 12px 6px;align-items:center;">
