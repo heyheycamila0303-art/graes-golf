@@ -236,6 +236,10 @@ let profile=null;       /* profiles テーブルのデータ */
 let rounds=[];          /* rounds テーブルのデータ */
 let isLoading=false;
 
+/* ===== アプリ内課金（StoreKit / 買い切り ¥300） ===== */
+let isPro = localStorage.getItem('graes_pro')==='1';   /* ずっと使える＝購入済み */
+const IAP_PRODUCT_ID = 'com.graes.golf.unlock';        /* App Store Connect で作成する非消耗型(買い切り)プロダクトID。実際のIDに合わせて変更してください */
+
 let stampLayout=[
   {id:'score',label:'スコア / 差分',required:true,vis:true},
   {id:'course',label:'コース図',required:false,vis:true},
@@ -273,6 +277,66 @@ function toast(m,err=false){
   el.classList.add('on');
   setTimeout(()=>el.classList.remove('on'),2800);
 }
+
+/* ===== アプリ内課金（StoreKit / WKWebView ブリッジ） =====
+   ・このHTMLはiOSネイティブアプリ(WKWebView)に組み込まれている前提です
+   ・「ずっと使える」ボタン → ネイティブ側のStoreKit購入フローを起動します
+   ・ネイティブ(Swift)側の実装が必要です:
+       1) WKWebViewConfiguration の userContentController に
+          name="iap" の WKScriptMessageHandler を登録
+       2) JSから {action:'purchase'|'restore', productId} を受信したら
+          StoreKit(Product.purchase / AppStore.sync)を実行
+       3) 結果を必ず evaluateJavaScript で下記コールバックに返す:
+            window.GraesIAP.onPurchased()
+            window.GraesIAP.onFailed('メッセージ')
+            window.GraesIAP.onRestored(true/false)
+*/
+function hasNativeIAP(){
+  return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.iap);
+}
+/* 「ずっと使える」ボタン → 押すとすぐに課金フローを起動 */
+function purchasePro(){
+  if(isPro){ toast('すでに購入済みです。ずっとお使いいただけます'); return; }
+  if(hasNativeIAP()){
+    showLoading('App Store に接続中...');
+    window.webkit.messageHandlers.iap.postMessage({action:'purchase', productId:IAP_PRODUCT_ID});
+  } else {
+    /* ネイティブアプリ外（Safari等）では課金できない */
+    toast('課金はアプリ版でのみご利用いただけます', true);
+  }
+}
+/* 購入の復元（機種変更・再インストール時） */
+function restorePro(){
+  if(hasNativeIAP()){
+    showLoading('購入を復元中...');
+    window.webkit.messageHandlers.iap.postMessage({action:'restore', productId:IAP_PRODUCT_ID});
+  } else {
+    toast('課金はアプリ版でのみご利用いただけます', true);
+  }
+}
+/* ネイティブ → JS コールバック */
+window.GraesIAP = {
+  onPurchased(){
+    isPro=true; localStorage.setItem('graes_pro','1');
+    hideLoading();
+    toast('ご購入ありがとうございます。ずっとお使いいただけます！');
+    if(document.getElementById('settings-overlay').style.display==='block') openSettings();
+  },
+  onFailed(msg){
+    hideLoading();
+    toast(msg||'購入をキャンセルしました', true);
+  },
+  onRestored(restored){
+    hideLoading();
+    if(restored){
+      isPro=true; localStorage.setItem('graes_pro','1');
+      toast('購入を復元しました。ずっとお使いいただけます');
+    } else {
+      toast('復元できる購入が見つかりませんでした', true);
+    }
+    if(document.getElementById('settings-overlay').style.display==='block') openSettings();
+  }
+};
 
 /* ===== Supabase 認証リスナー ===== */
 sb.auth.onAuthStateChange(async (event, session) => {
@@ -882,6 +946,24 @@ function settingsHTML(){
         <div class="sec-icon" style="background:#fef3e8;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="#F5A800" stroke-width="1.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#F5A800" stroke-width="1.5"/></svg></div>
         <div class="sec-info"><div class="sec-lbl">パスワードを変更</div><div class="sec-val">•••••••••</div></div><div class="sec-arrow">›</div>
       </div>
+    </div>
+    <div style="padding:0 10px 5px;font-size:8px;color:#999890;font-weight:500;">プラン</div>
+    <div class="sec-card">
+      ${isPro?`
+      <div class="sec-row">
+        <div class="sec-icon" style="background:#eaf3de;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#3B6D11" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="sec-info"><div class="sec-lbl">ずっと使える</div><div class="sec-val">購入済み・ありがとうございます</div></div>
+        <span class="badge-green">購入済</span>
+      </div>`:`
+      <div class="sec-row" style="cursor:pointer;" onclick="purchasePro()">
+        <div class="sec-icon" style="background:#eaf3de;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 18h18M4 8l4 4 4-7 4 7 4-4-2 10H6z" stroke="#3B6D11" stroke-width="1.5" stroke-linejoin="round"/></svg></div>
+        <div class="sec-info"><div class="sec-lbl">ずっと使える（買い切り）</div><div class="sec-val">¥300 で全機能をずっと利用できます</div></div>
+        <span style="font-size:12px;font-weight:700;color:#3B6D11;white-space:nowrap;">¥300&nbsp;›</span>
+      </div>
+      <div class="sec-row" style="cursor:pointer;" onclick="restorePro()">
+        <div class="sec-icon" style="background:#f5f5f0;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 12a8 8 0 1 1 2.3 5.6M4 12V7m0 5h5" stroke="#999890" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="sec-info"><div class="sec-lbl">購入を復元</div><div class="sec-val">機種変更・再インストール時</div></div><div class="sec-arrow">›</div>
+      </div>`}
     </div>
     <div style="padding:0 10px 5px;font-size:8px;color:#999890;font-weight:500;">アプリ情報</div>
     <div class="sec-card">
